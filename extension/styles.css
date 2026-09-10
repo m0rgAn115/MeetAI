@@ -1,0 +1,355 @@
+/* ============================================================
+   FLOATING ROOT
+   ============================================================ */
+
+#meet-agent-root {
+  position: fixed;
+
+  top: 80px;
+  right: 24px;
+
+  width: 58px;
+  height: 58px;
+
+  z-index: 999999;
+
+  font-family:
+    Arial,
+    sans-serif;
+}
+
+
+/* ============================================================
+   AGENT BUBBLE
+   ============================================================ */
+
+#meet-agent-bubble {
+  position: relative;
+
+  width: 58px;
+  height: 58px;
+
+  border-radius: 50%;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  background:
+    rgba(28, 28, 32, 0.98);
+
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.15);
+
+  box-shadow:
+    0 10px 30px
+    rgba(0, 0, 0, 0.35);
+
+  color: white;
+
+  cursor: grab;
+
+  user-select: none;
+
+  touch-action: none;
+}
+
+
+#meet-agent-bubble:active {
+  cursor: grabbing;
+}
+
+
+.meet-agent-bubble-logo {
+  font-size: 26px;
+  line-height: 1;
+}
+
+
+.meet-agent-bubble-status {
+  position: absolute;
+
+  right: 3px;
+  bottom: 4px;
+
+  width: 11px;
+  height: 11px;
+
+  border-radius: 50%;
+
+  border: 2px solid #1c1c20;
+}
+
+
+.meet-agent-bubble-status.active {
+  background: #4ade80;
+}
+
+
+.meet-agent-bubble-status.inactive {
+  background: #9ca3af;
+}
+
+
+/* ============================================================
+   FULL PANEL
+   ============================================================ */
+
+.meet-agent-window {
+  position: absolute;
+
+  top: 68px;
+  right: 0;
+
+  width: 350px;
+
+  padding: 16px;
+
+  box-sizing: border-box;
+
+  background:
+    rgba(28, 28, 32, 0.98);
+
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.13);
+
+  border-radius: 18px;
+
+  box-shadow:
+    0 16px 50px
+    rgba(0, 0, 0, 0.4);
+
+  color: white;
+}
+
+
+/* ============================================================
+   RECOMMENDATION CARD
+   ============================================================ */
+
+.meet-agent-recommendation {
+  position: absolute;
+
+  top: 68px;
+  right: 0;
+
+  width: 320px;
+
+  box-sizing: border-box;
+
+  color: white;
+}
+
+
+.meet-agent-card {
+  position: relative;
+
+  padding: 16px;
+
+  border-radius: 16px;
+
+  background:
+    rgba(28, 28, 32, 0.98);
+
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.13);
+
+  box-shadow:
+    0 16px 50px
+    rgba(0, 0, 0, 0.4);
+}
+
+
+.meet-agent-dismiss {
+  position: absolute;
+
+  top: 8px;
+  right: 10px;
+
+  width: 26px;
+  height: 26px;
+
+  padding: 0;
+
+  border: none;
+
+  background: transparent;
+
+  color:
+    rgba(255, 255, 255, 0.6);
+
+  font-size: 20px;
+
+  cursor: pointer;
+}
+
+
+.meet-agent-dismiss:hover {
+  color: white;
+}
+
+
+/* ============================================================
+   SHARED
+   ============================================================ */
+
+.hidden {
+  display: none !important;
+}
+
+.meet-agent-header {
+  font-size: 16px;
+  font-weight: 700;
+
+  margin-bottom: 12px;
+}
+
+
+.meet-agent-status {
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  font-size: 13px;
+
+  margin-bottom: 14px;
+
+  opacity: 0.85;
+}
+
+
+.meet-agent-status-dot {
+  width: 8px;
+  height: 8px;
+
+  border-radius: 50%;
+
+  display: inline-block;
+}
+
+.meet-agent-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.meet-agent-form input,
+.meet-agent-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+
+  padding: 9px;
+
+  border-radius: 8px;
+
+  border:
+    1px solid rgba(255, 255, 255, 0.12);
+
+  background:
+    rgba(255, 255, 255, 0.06);
+
+  color: white;
+
+  font-size: 13px;
+}
+
+.meet-agent-form textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.meet-agent-form button {
+  border: none;
+
+  border-radius: 8px;
+
+  padding: 9px 12px;
+
+  cursor: pointer;
+
+  font-weight: 600;
+}
+
+#meet-agent-result {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+
+.meet-agent-card-title {
+  font-weight: 700;
+
+  margin-bottom: 8px;
+}
+
+.meet-agent-secondary {
+  margin-top: 8px;
+
+  opacity: 0.7;
+
+  font-size: 12px;
+}
+
+.meet-agent-loading,
+.meet-agent-silent,
+.meet-agent-error {
+  opacity: 0.8;
+}
+
+.meet-agent-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.meet-agent-controls button {
+  flex: 1;
+
+  padding: 8px 10px;
+
+  border: none;
+  border-radius: 8px;
+
+  cursor: pointer;
+
+  font-weight: 600;
+}
+
+.meet-agent-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.meet-agent-status-dot.active {
+  background: #4ade80;
+}
+
+.meet-agent-status-dot.inactive {
+  background: #9ca3af;
+}
+
+.meet-agent-action-button {
+  width: 100%;
+
+  margin-top: 12px;
+
+  padding: 9px 12px;
+
+  border: none;
+  border-radius: 8px;
+
+  cursor: pointer;
+
+  font-weight: 600;
+}
+
+.meet-agent-action-button:disabled {
+  opacity: 0.65;
+  cursor: default;
+}

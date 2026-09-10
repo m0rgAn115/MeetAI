@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Meet Agent",
+  "version": "0.1.0",
+  "description": "Context-aware AI agent for Google Meet.",
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://meet.google.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "host_permissions": [
+    "http://localhost:3000/*"
+  ]
+}
