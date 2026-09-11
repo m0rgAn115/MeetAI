@@ -727,6 +727,29 @@ async function sendTranscriptToBackend(
   text
 ) {
 
+  const timeZone =
+    Intl.DateTimeFormat()
+      .resolvedOptions()
+      .timeZone;
+
+  const now = new Date();
+
+  // Fecha/hora local legible, ya resuelta en la zona horaria
+  // del usuario, para que el modelo NO tenga que convertir UTC.
+  const currentDateTime =
+    now.toLocaleString("en-US", {
+      timeZone,
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+
+
   const response = await fetch(
     "http://localhost:3000/analyze",
     {
@@ -739,14 +762,8 @@ async function sendTranscriptToBackend(
       body: JSON.stringify({
         speaker,
         text,
-
-        currentDateTime:
-          new Date().toISOString(),
-
-        timeZone:
-          Intl.DateTimeFormat()
-            .resolvedOptions()
-            .timeZone,
+        currentDateTime,
+        timeZone,
       }),
     }
   );
