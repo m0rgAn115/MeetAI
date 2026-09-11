@@ -8,6 +8,7 @@ import {
   isGoogleCalendarConnected,
   createCalendarEvent,
   updateCalendarEvent,
+  findConflictingEvent,
 } from "./calendar";
 
 import {
@@ -141,8 +142,53 @@ app.post("/analyze", async (req, res) => {
     );
 
 
+    // Si el evento propone una fecha/hora concreta, revisamos
+    // si choca con algo que ya está en el calendario real.
+    let calendarConflict: Awaited<
+      ReturnType<
+        typeof findConflictingEvent
+      >
+    > = null;
+
+    if (
+      isGoogleCalendarConnected() &&
+      event.calendarStart &&
+      event.calendarEnd
+    ) {
+
+      try {
+
+        calendarConflict =
+          await findConflictingEvent(
+            event.calendarStart,
+            event.calendarEnd
+          );
+
+
+        if (calendarConflict) {
+
+          console.log(
+            "⚠️ Calendar conflict found:",
+            calendarConflict
+          );
+        }
+
+
+      } catch (error) {
+
+        console.error(
+          "Calendar conflict check failed:",
+          error
+        );
+      }
+    }
+
+
     // Devolvemos el resultado al cliente
-    return res.json(event);
+    return res.json({
+      ...event,
+      calendarConflict,
+    });
 
 
   } catch (error) {

@@ -296,6 +296,27 @@
   font-size: 12px;
 }
 
+.meet-agent-conflict {
+  margin-top: 8px;
+
+  padding: 8px 10px;
+
+  border-radius: 8px;
+
+  background:
+    rgba(250, 204, 21, 0.12);
+
+  border:
+    1px solid
+    rgba(250, 204, 21, 0.35);
+
+  color: #facc15;
+
+  font-size: 12px;
+
+  line-height: 1.4;
+}
+
 .meet-agent-loading,
 .meet-agent-silent,
 .meet-agent-error {

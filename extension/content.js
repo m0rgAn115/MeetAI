@@ -1309,6 +1309,29 @@ function renderAgentEvent(
         }
 
         ${
+          event.calendarConflict
+            ? `
+              <div class="meet-agent-conflict">
+                ⚠️ Conflicts with
+                "${escapeHtml(
+                  event.calendarConflict.summary
+                )}"
+                (${escapeHtml(
+                  formatCalendarDate(
+                    event.calendarConflict.start
+                  )
+                )} –
+                ${escapeHtml(
+                  formatCalendarDate(
+                    event.calendarConflict.end
+                  )
+                )})
+              </div>
+            `
+            : ""
+        }
+
+        ${
           canAddToCalendar
             ? `
               <button
@@ -1415,6 +1438,29 @@ function renderAgentEvent(
                 ${escapeHtml(
                   event.attendeeEmails.join(", ")
                 )}
+              </div>
+            `
+            : ""
+        }
+
+        ${
+          event.calendarConflict
+            ? `
+              <div class="meet-agent-conflict">
+                ⚠️ Conflicts with
+                "${escapeHtml(
+                  event.calendarConflict.summary
+                )}"
+                (${escapeHtml(
+                  formatCalendarDate(
+                    event.calendarConflict.start
+                  )
+                )} –
+                ${escapeHtml(
+                  formatCalendarDate(
+                    event.calendarConflict.end
+                  )
+                )})
               </div>
             `
             : ""

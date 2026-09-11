@@ -1,6 +1,18 @@
 import { google } from "googleapis";
 
 
+// Local shape for the fields we read off a Calendar API event.
+// (googleapis' own per-API type declarations aren't resolvable
+// in this install, so we avoid importing calendar_v3 directly.)
+interface CalendarApiEvent {
+  id?: string | null;
+  summary?: string | null;
+  htmlLink?: string | null;
+  start?: { dateTime?: string | null } | null;
+  end?: { dateTime?: string | null } | null;
+}
+
+
 // ============================================================
 // GOOGLE OAUTH CLIENT
 // ============================================================
@@ -97,6 +109,84 @@ export async function saveGoogleAuthCode(
 export function isGoogleCalendarConnected() {
 
   return googleTokens !== null;
+}
+
+
+// ============================================================
+// FIND CONFLICTING EVENT
+// ============================================================
+
+export async function findConflictingEvent(
+  startDateTime: string,
+  endDateTime: string
+) {
+
+  if (!googleTokens) {
+
+    throw new Error(
+      "Google Calendar is not connected"
+    );
+
+  }
+
+
+  googleOAuthClient.setCredentials(
+    googleTokens
+  );
+
+
+  const calendar =
+    google.calendar({
+      version: "v3",
+      auth: googleOAuthClient,
+    });
+
+
+  const response =
+    await calendar.events.list({
+
+      calendarId: "primary",
+
+      timeMin: startDateTime,
+
+      timeMax: endDateTime,
+
+      singleEvents: true,
+
+      orderBy: "startTime",
+
+    });
+
+
+  const conflict =
+    (
+      response.data.items ??
+      []
+    ).find(
+      (item: CalendarApiEvent) =>
+        item.start?.dateTime &&
+        item.end?.dateTime
+    );
+
+
+  if (!conflict) {
+    return null;
+  }
+
+
+  return {
+    id: conflict.id,
+
+    summary:
+      conflict.summary ??
+      "Untitled event",
+
+    start: conflict.start?.dateTime,
+
+    end: conflict.end?.dateTime,
+
+    htmlLink: conflict.htmlLink,
+  };
 }
 
 
