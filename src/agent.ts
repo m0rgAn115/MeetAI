@@ -40,6 +40,8 @@ export const MeetingEventSchema = z.object({
   calendarStart: z.string().nullable(),
 
   calendarEnd: z.string().nullable(),
+
+  attendeeEmails: z.array(z.string()).nullable(),
 });
 
 
@@ -156,6 +158,20 @@ Rules:
 - A commitment requires a reasonably clear owner.
 - An action_item does not require an owner.
 - Vague suggestions should still be "none".
+
+ATTENDEE EMAILS
+
+If the transcript contains email addresses that were shared so people
+could be invited to the event being scheduled — for example, someone
+asked "send me your emails so I can invite you" and one or more
+participants replied with an email address — include every such email
+in "attendeeEmails" as an array of strings.
+
+Only include emails that were shared in the context of being invited to
+THIS specific event. Ignore unrelated emails (e.g. mentioned only as an
+example, or belonging to a different topic).
+
+If no attendee emails were shared, return null.
 `,
 
   outputType: MeetingEventSchema,

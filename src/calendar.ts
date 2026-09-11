@@ -108,7 +108,8 @@ export async function createCalendarEvent(
   title: string,
   startDateTime: string,
   endDateTime: string,
-  description?: string
+  description?: string,
+  attendeeEmails?: string[]
 ) {
 
   if (!googleTokens) {
@@ -137,6 +138,11 @@ export async function createCalendarEvent(
 
       calendarId: "primary",
 
+      sendUpdates:
+        attendeeEmails?.length
+          ? "all"
+          : "none",
+
       requestBody: {
 
         summary: title,
@@ -152,6 +158,11 @@ export async function createCalendarEvent(
           dateTime: endDateTime,
         },
 
+        attendees:
+          attendeeEmails?.map(
+            (email) => ({ email })
+          ),
+
       },
 
     });
@@ -161,6 +172,8 @@ export async function createCalendarEvent(
     id: response.data.id,
     htmlLink: response.data.htmlLink,
     summary: response.data.summary,
+    attendees:
+      response.data.attendees ?? [],
   };
 }
 
@@ -169,7 +182,8 @@ export async function updateCalendarEvent(
   title: string,
   startDateTime: string,
   endDateTime: string,
-  description?: string
+  description?: string,
+  attendeeEmails?: string[]
 ) {
 
   if (!googleTokens) {
@@ -198,6 +212,11 @@ export async function updateCalendarEvent(
 
       eventId,
 
+      sendUpdates:
+        attendeeEmails?.length
+          ? "all"
+          : "none",
+
       requestBody: {
 
         summary: title,
@@ -213,6 +232,11 @@ export async function updateCalendarEvent(
           dateTime: endDateTime,
         },
 
+        attendees:
+          attendeeEmails?.map(
+            (email) => ({ email })
+          ),
+
       },
 
     });
@@ -222,5 +246,7 @@ export async function updateCalendarEvent(
     id: response.data.id,
     htmlLink: response.data.htmlLink,
     summary: response.data.summary,
+    attendees:
+      response.data.attendees ?? [],
   };
 }

@@ -270,6 +270,10 @@ app.post(
         !isGoogleCalendarConnected()
       ) {
 
+        console.warn(
+          "⚠️ Calendar creation rejected: Google Calendar is not connected"
+        );
+
         return res.status(401).json({
           error:
             "Google Calendar is not connected",
@@ -283,6 +287,7 @@ app.post(
         startDateTime,
         endDateTime,
         description,
+        attendees,
       } = req.body;
 
 
@@ -305,7 +310,8 @@ app.post(
           title,
           startDateTime,
           endDateTime,
-          description
+          description,
+          attendees
         );
 
 
@@ -354,6 +360,7 @@ app.patch(
         startDateTime,
         endDateTime,
         description,
+        attendees,
       } = req.body;
 
 
@@ -378,7 +385,8 @@ app.patch(
           title,
           startDateTime,
           endDateTime,
-          description
+          description,
+          attendees
         );
 
 

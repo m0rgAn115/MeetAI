@@ -15,6 +15,11 @@ const lastSentCaptions = new Map();
 
 const CAPTION_DEBOUNCE_MS = 1500;
 
+const chatMessageTimers = new Map();
+const processedChatMessageIds = new Set();
+
+const CHAT_MESSAGE_DEBOUNCE_MS = 800;
+
 
 // ============================================================
 // CREATE PANEL
@@ -715,6 +720,18 @@ function clearCaptionMemory() {
   captionTimers.clear();
 
   lastSentCaptions.clear();
+
+
+  chatMessageTimers.forEach(
+    (timer) => {
+      clearTimeout(timer);
+    }
+  );
+
+
+  chatMessageTimers.clear();
+
+  processedChatMessageIds.clear();
 }
 
 
@@ -823,6 +840,10 @@ async function createCalendarEventFromAgent(
         description:
           event.summary ??
           "Created by Meet Agent",
+
+        attendees:
+          event.attendeeEmails ??
+          [],
       }),
     }
   );
@@ -898,6 +919,10 @@ async function updateCalendarEventFromAgent(
         description:
           event.summary ??
           "Updated by Meet Agent",
+
+        attendees:
+          event.attendeeEmails ??
+          [],
       }),
     }
   );
@@ -1271,6 +1296,19 @@ function renderAgentEvent(
         </div>
 
         ${
+          event.attendeeEmails?.length
+            ? `
+              <div>
+                <strong>Invite:</strong>
+                ${escapeHtml(
+                  event.attendeeEmails.join(", ")
+                )}
+              </div>
+            `
+            : ""
+        }
+
+        ${
           canAddToCalendar
             ? `
               <button
@@ -1368,6 +1406,19 @@ function renderAgentEvent(
             displayDate
           )}
         </div>
+
+        ${
+          event.attendeeEmails?.length
+            ? `
+              <div>
+                <strong>Invite:</strong>
+                ${escapeHtml(
+                  event.attendeeEmails.join(", ")
+                )}
+              </div>
+            `
+            : ""
+        }
 
         ${
           canAddToCalendar
@@ -1758,6 +1809,203 @@ async function analyzeLiveCaption(
 
 
 // ============================================================
+// GOOGLE MEET CHAT MESSAGES
+// ============================================================
+
+function scanMeetChat() {
+
+  if (!meetingActive) {
+    return;
+  }
+
+
+  const messageElements =
+    document.querySelectorAll(
+      ".RLrADb[data-message-id]"
+    );
+
+
+  messageElements.forEach(
+    (messageElement) => {
+
+      const messageId =
+        messageElement.dataset
+          .messageId;
+
+
+      if (
+        !messageId ||
+        processedChatMessageIds.has(
+          messageId
+        ) ||
+        chatMessageTimers.has(
+          messageId
+        )
+      ) {
+
+        return;
+      }
+
+
+      scheduleChatMessageAnalysis(
+        messageId,
+        messageElement
+      );
+    }
+  );
+}
+
+
+// ============================================================
+// EXTRACT CHAT MESSAGE TEXT
+// ============================================================
+//
+// [jsname="dTKtvb"] holds the actual message body (confirmed by
+// testing — it shows the typed text, not the sender's identity).
+
+function extractChatMessageText(
+  messageElement
+) {
+
+  const textElement =
+    messageElement.querySelector(
+      '[jsname="dTKtvb"]'
+    );
+
+
+  return (
+    textElement
+      ?.textContent
+      ?.trim() ?? ""
+  );
+}
+
+
+// ============================================================
+// EXTRACT CHAT MESSAGE SENDER
+// ============================================================
+//
+// Meet doesn't expose a stable class for a per-message sender
+// label, and it appears to omit one entirely for your own
+// messages. Instead of guessing a class name, we take the whole
+// message group (grouped by jsname="Ypafjf") and strip out the
+// parts we know aren't a sender name — the message rows
+// themselves, the timestamp, and pin-button tooltips. Whatever
+// text is left over is the group's sender label, if Meet
+// rendered one; otherwise we assume it's your own message.
+
+function extractChatMessageSender(
+  messageElement
+) {
+
+  const group =
+    messageElement.closest(
+      '[jsname="Ypafjf"]'
+    );
+
+
+  if (!group) {
+    return "Tú";
+  }
+
+
+  const clone =
+    group.cloneNode(true);
+
+
+  clone
+    .querySelectorAll(
+      '.RLrADb, .HNucUd, [role="tooltip"]'
+    )
+    .forEach(
+      (el) => el.remove()
+    );
+
+
+  const leftoverText =
+    clone.textContent
+      ?.trim();
+
+
+  return leftoverText || "Tú";
+}
+
+
+// ============================================================
+// CHAT MESSAGE DEBOUNCE
+// ============================================================
+//
+// Chat messages can render before their text has fully populated,
+// so we wait briefly before reading the final content.
+
+function scheduleChatMessageAnalysis(
+  messageId,
+  messageElement
+) {
+
+  if (!meetingActive) {
+    return;
+  }
+
+
+  const timer =
+    setTimeout(
+      async () => {
+
+        chatMessageTimers.delete(
+          messageId
+        );
+
+
+        if (!meetingActive) {
+          return;
+        }
+
+
+        processedChatMessageIds.add(
+          messageId
+        );
+
+
+        const sender =
+          extractChatMessageSender(
+            messageElement
+          );
+
+        const text =
+          extractChatMessageText(
+            messageElement
+          );
+
+
+        if (!text) {
+          return;
+        }
+
+
+        console.log(
+          `💬 Chat message detected: ${sender}: ${text}`
+        );
+
+
+        await analyzeLiveCaption(
+          sender,
+          text
+        );
+      },
+
+      CHAT_MESSAGE_DEBOUNCE_MS
+    );
+
+
+  chatMessageTimers.set(
+    messageId,
+    timer
+  );
+}
+
+
+// ============================================================
 // WATCH GOOGLE MEET DOM
 // ============================================================
 
@@ -1766,6 +2014,7 @@ const captionObserver =
     () => {
 
       scanMeetCaptions();
+      scanMeetChat();
     }
   );
 
