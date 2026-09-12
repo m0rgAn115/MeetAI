@@ -30,6 +30,10 @@ const ModelSignalPayloadSchema = z.object({
   priorValue: z.string().nullable(),
   uncertainty: z.string().nullable(),
   documentQuery: z.string().nullable(),
+  emailQuery: z.string().nullable(),
+  emailTo: z.array(z.string()).nullable(),
+  emailSubject: z.string().nullable(),
+  emailBody: z.string().nullable(),
   risk: z.string().nullable(),
   attributes: z.array(z.object({ key: z.string(), value: z.string() }).strict()),
 }).strict();
@@ -39,7 +43,7 @@ const ModelObserverOutputSchema = z.object({
     id: z.string(),
     meetingId: z.string(),
     segmentSequence: z.number().int().nonnegative(),
-    type: z.enum(["commitment", "decision", "change", "possible_contradiction", "question", "document_reference", "risk", "topic_boundary", "noop"]),
+    type: z.enum(["commitment", "decision", "change", "possible_contradiction", "question", "document_reference", "email_search", "email_draft", "risk", "topic_boundary", "noop"]),
     payload: ModelSignalPayloadSchema,
     confidence: z.number().min(0).max(1),
     urgency: z.number().min(0).max(1),
@@ -160,6 +164,18 @@ export class HeuristicObserver implements Observer {
       shouldRetrieveContext = true;
       retrievalQuery = text.replace(/\b(el|la|los|las|un|una|documento|archivo|de)\b/gi, " ").replace(/\s+/g, " ").trim();
     }
+    if (/(busca|buscar|encuentra|find|search).+(correo|email|inbox|bandeja)|tengo (un )?(el )?correo|i (?:think i )?have (?:an |the )?email/i.test(lower)) {
+      type = "email_search";
+      shouldRetrieveContext = true;
+      retrievalQuery = text.replace(/\b(busca|buscar|encuentra|find|search|el|la|correo|email|de)\b/gi, " ").replace(/\s+/g, " ").trim();
+      payload.emailQuery = retrievalQuery;
+    }
+    if (/(env[ií]a|manda|escribe|write|send).+(correo|email|recap|resumen)/i.test(lower)) {
+      type = "email_draft";
+      payload.emailTo = [];
+      payload.emailSubject = "Resumen de la reunión";
+      payload.emailBody = text;
+    }
     if (/cambia|cambiar|se mueve|move.+from|instead/i.test(lower)) {
       type = "change";
       payload.stage = /cambia|se mueve/i.test(lower) ? "confirmed" : "proposed";
@@ -235,6 +251,28 @@ export class HeuristicOrchestrator implements InterventionOrchestrator {
         proposedAction: null,
       };
     }
+    if (input.signal.type === "email_search") {
+      return {
+        kind: "prior_evidence",
+        title: "Búsqueda en Gmail",
+        message: input.evidence.length ? input.evidence[0].memory.summary : "Sin resultados en Gmail",
+        currentEvidence: input.segment.text,
+        historicalEvidenceIds: evidenceIds,
+        includeInClosing: false,
+        proposedAction: null,
+      };
+    }
+    if (input.signal.type === "email_draft") {
+      return {
+        kind: "informative",
+        title: "Borrador de correo listo",
+        message: "Revisa el borrador antes de enviarlo.",
+        currentEvidence: input.segment.text,
+        historicalEvidenceIds: evidenceIds,
+        includeInClosing: false,
+        proposedAction: null,
+      };
+    }
     if (input.signal.confidence < 0.65) return silent();
     return {
       kind: "informative",
@@ -303,6 +341,7 @@ export class LiveCopilot {
           query: observed.signal.retrievalQuery,
           participantIds: observed.signal.relatedEntities,
           includeDrive: observed.signal.type === "document_reference",
+          includeGmail: observed.signal.type === "email_search",
           limit: 5,
         })
       : [];

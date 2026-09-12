@@ -212,7 +212,18 @@ const analyzeFinalSegment: express.RequestHandler = async (req, res) => {
         result.correlationId,
       );
     }
-    return res.json(toExtensionEvent(result, proposedAction?.id ?? null));
+    // If the agent drafted an email that should reference a Drive file, look
+    // it up and attach its link to the body before it reaches the extension.
+    if (result.signal.type === "email_draft" && typeof result.signal.payload.documentQuery === "string"
+      && result.signal.payload.documentQuery && typeof result.signal.payload.emailBody === "string") {
+      try {
+        const topMatch = (await searchDriveFiles(result.signal.payload.documentQuery))[0];
+        if (topMatch) {
+          result.signal.payload.emailBody = `${result.signal.payload.emailBody}\n\n${topMatch.name}:\n${topMatch.webViewLink}`;
+        }
+      } catch (error) { console.error("Automatic Drive lookup for email draft failed:", error); }
+    }
+    return res.json(toExtensionEvent(result, proposedAction));
   } catch (error) { return sendError(res, error); }
 };
 
@@ -291,12 +302,16 @@ app.post("/drive/search", async (req, res) => {
   } catch (error) { return sendError(res, error); }
 });
 
-function toExtensionEvent(result: Awaited<ReturnType<LiveCopilot["processFinalSegment"]>>, proposedActionId: string | null) {
+function toExtensionEvent(
+  result: Awaited<ReturnType<LiveCopilot["processFinalSegment"]>>,
+  proposedAction: Awaited<ReturnType<ActionExecutor["proposeCalendarEvent"]>> | null,
+) {
   const { signal, intervention, evidence } = result;
   const typeMap: Record<string, string> = {
     commitment: "commitment", decision: "action_item", change: "change_request",
     possible_contradiction: "contradiction", question: "context",
-    document_reference: "file_search", risk: "context", topic_boundary: "none", noop: "none",
+    document_reference: "file_search", email_search: "email_search", email_draft: "email_draft",
+    risk: "context", topic_boundary: "none", noop: "none",
   };
   const calendar = intervention.proposedAction;
   return {
@@ -318,7 +333,15 @@ function toExtensionEvent(result: Awaited<ReturnType<LiveCopilot["processFinalSe
       id: item.source.sourceId, name: item.memory.content, webViewLink: item.source.documentUri,
       modifiedTime: item.observedAt, mimeType: null, owner: null,
     })),
-    calendarConflict: null,
+    emailQuery: signal.type === "email_search" ? signal.retrievalQuery : null,
+    gmailResults: evidence.filter((item) => item.source.type === "gmail").map((item) => ({
+      id: item.source.sourceId, subject: item.memory.content, from: null,
+      snippet: item.quotedText, webViewLink: item.source.documentUri, date: item.observedAt,
+    })),
+    emailTo: signal.type === "email_draft" && Array.isArray(signal.payload.emailTo) ? signal.payload.emailTo : null,
+    emailSubject: signal.type === "email_draft" && typeof signal.payload.emailSubject === "string" ? signal.payload.emailSubject : null,
+    emailBody: signal.type === "email_draft" && typeof signal.payload.emailBody === "string" ? signal.payload.emailBody : null,
+    calendarConflict: proposedAction?.preview.conflict ?? null,
     meetingId: signal.meetingId,
     segmentSequence: signal.segmentSequence,
     correlationId: result.correlationId,
@@ -326,7 +349,7 @@ function toExtensionEvent(result: Awaited<ReturnType<LiveCopilot["processFinalSe
     signal,
     intervention,
     evidence,
-    proposedActionId,
+    proposedActionId: proposedAction?.id ?? null,
   };
 }
 

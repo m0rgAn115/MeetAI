@@ -7,6 +7,8 @@ export const SignalTypeSchema = z.enum([
   "possible_contradiction",
   "question",
   "document_reference",
+  "email_search",
+  "email_draft",
   "risk",
   "topic_boundary",
   "noop",
