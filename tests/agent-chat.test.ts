@@ -7,6 +7,7 @@ import {
   ChatRequestSchema,
   ChatToolbox,
   HeuristicChatModel,
+  mexicoCityNow,
 } from "../src/agent-chat";
 import { RequestContext } from "../src/contracts";
 import { InMemoryMemoryStore } from "../src/memory/in-memory-store";
@@ -83,4 +84,11 @@ test("un evento propuesto desde el chat no se ejecuta hasta confirmarlo", async 
   const actionId = attachment?.kind === "calendar_proposal" ? attachment.actionId : "";
   await deps.actions.confirmCalendarEvent(context, actionId);
   assert.equal(executions(), 1);
+});
+
+test("el chat usa la fecha y hora de Ciudad de México", () => {
+  const now = mexicoCityNow(new Date("2026-09-12T21:31:05.000Z"));
+  assert.equal(now.iso, "2026-09-12T15:31:05-06:00");
+  assert.equal(now.utcOffset, "-06:00");
+  assert.match(now.readable, /sábado, 12 de septiembre de 2026/);
 });

@@ -167,31 +167,6 @@ function scrollChatToBottom() {
 // SEND CHAT MESSAGE
 // ============================================================
 
-function localTimingContext() {
-
-  const now = new Date();
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const offset = -now.getTimezoneOffset();
-  const hours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, "0");
-  const minutes = String(Math.abs(offset) % 60).padStart(2, "0");
-
-  return {
-    currentDateTime: now.toLocaleString("en-US", {
-      timeZone,
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }),
-    timeZone,
-    utcOffset: `${offset >= 0 ? "+" : "-"}${hours}:${minutes}`,
-  };
-}
-
-
 async function sendChatToBackend(message, history) {
 
   const response = await fetch(
@@ -205,7 +180,6 @@ async function sendChatToBackend(message, history) {
         meetingId: meetingActive ? currentMeetingId : null,
         workspaceId: currentWorkspaceId,
         userId: currentUserId,
-        ...localTimingContext(),
       }),
     }
   );

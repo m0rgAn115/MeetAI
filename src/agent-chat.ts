@@ -14,9 +14,6 @@ export const ChatRequestSchema = z.object({
     content: z.string().max(4000),
   })).max(20).default([]),
   meetingId: z.string().nullable().default(null),
-  currentDateTime: z.string().nullable().default(null),
-  timeZone: z.string().nullable().default(null),
-  utcOffset: z.string().nullable().default(null),
 });
 
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;
@@ -245,16 +242,33 @@ const chatAgent = new Agent<ChatToolbox>({
   ],
 });
 
+const CHAT_TIME_ZONE = "America/Mexico_City";
+
+// The chat always reasons with Mexico City time, taken from the server clock
+// so it doesn't depend on the browser's time zone.
+export function mexicoCityNow(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: CHAT_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZoneName: "longOffset",
+  }).formatToParts(now).map((part) => [part.type, part.value]));
+  const utcOffset = parts.timeZoneName === "GMT" ? "+00:00" : parts.timeZoneName.replace("GMT", "");
+  return {
+    readable: new Intl.DateTimeFormat("es-MX", { timeZone: CHAT_TIME_ZONE, dateStyle: "full", timeStyle: "short" })
+      .format(now),
+    iso: `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${utcOffset}`,
+    utcOffset,
+  };
+}
+
 export class OpenAIChatModel implements ChatModel {
   async respond(toolbox: ChatToolbox): Promise<string> {
     const { request } = toolbox;
+    const now = mexicoCityNow();
     const situation = [
       `Prompt ${AGENT_CHAT_PROMPT_VERSION}`,
-      request.currentDateTime && `Fecha y hora local: ${request.currentDateTime}`,
-      request.timeZone && `Zona horaria: ${request.timeZone}`,
-      request.utcOffset && `Desplazamiento UTC: ${request.utcOffset}`,
+      `Fecha y hora actual en Ciudad de México: ${now.readable} (${now.iso}, ${CHAT_TIME_ZONE}, UTC${now.utcOffset})`,
       `Agente escuchando una reunión: ${request.meetingId ? "sí" : "no"}`,
-    ].filter(Boolean).join(". ");
+    ].join(". ");
     const result = await run(chatAgent, [
       system(situation),
       ...request.history

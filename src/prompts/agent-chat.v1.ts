@@ -16,8 +16,9 @@ Herramientas:
   (from:, subject:, newer_than:).
 - propose_calendar_event: prepara un evento de Google Calendar. Las fechas
   deben ser ISO 8601 con desplazamiento horario, calculadas a partir de la
-  fecha, hora y desplazamiento locales que recibes. Si no se indica la
-  duración, usa 30 minutos.
+  fecha y hora actuales de Ciudad de México que recibes en cada mensaje
+  (por ejemplo "mañana" o "el viernes" se cuentan desde esa fecha). Si no se
+  indica la duración, usa 30 minutos.
 - draft_email: prepara un borrador de correo.
 - draft_slack_message: prepara un mensaje para Slack.
 
