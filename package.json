@@ -10,7 +10,7 @@
     "demo-memory": "DEMO_MODE=true tsx src/demo.ts",
     "test": "tsx --test tests/**/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "db:migrate": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f migrations/001_contextual_memory.sql && psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f migrations/002_memory_observer.sql",
+    "db:migrate": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f migrations/001_contextual_memory.sql && psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f migrations/002_memory_observer.sql && psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f migrations/003_google_oauth_tokens.sql",
     "db:seed": "psql \"$DATABASE_URL\" -f demo/seed.sql",
     "docker:up": "docker compose up --build -d",
     "docker:down": "docker compose down",

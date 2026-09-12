@@ -66,9 +66,8 @@ navegador y concede acceso. Comprueba la sesión con:
 curl http://localhost:3000/calendar/status
 ```
 
-Debe responder `{"connected":true}`. El token OAuth vive en memoria en este
-MVP, por lo que hay que reconectar Google si se reinicia el contenedor de la
-aplicación.
+Debe responder `{"connected":true}`. La conexión OAuth se cifra y guarda en
+PostgreSQL, y se restaura automáticamente al reiniciar los contenedores.
 
 ## Visor de memoria local
 

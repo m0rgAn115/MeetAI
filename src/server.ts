@@ -5,7 +5,7 @@ import cors from "cors";
 import express, { Request } from "express";
 import { ActionExecutor, CalendarActionSchema, DemoCalendarGateway, GoogleCalendarGateway } from "./action-executor";
 import { authenticateRequest } from "./auth";
-import { getGoogleAuthUrl, isGoogleCalendarConnected, saveGoogleAuthCode } from "./calendar";
+import { getGoogleAuthUrl, initializeGoogleOAuth, isGoogleCalendarConnected, saveGoogleAuthCode } from "./calendar";
 import { RequestContext } from "./contracts";
 import { isDatabaseConfigured } from "./db";
 import { searchDriveFiles } from "./drive";
@@ -351,9 +351,17 @@ app.post("/gmail/send", async (req, res) => {
   } catch (error) { return sendError(res, error); }
 });
 
-curator.start();
-if (memoryObserver) void memoryObserver.start().catch((error) => console.error("Memory observer listener failed:", error));
-app.listen(PORT, () => {
-  console.log(`Meet Agent backend running on http://localhost:${PORT}`);
-  if (!isDatabaseConfigured()) console.warn("DATABASE_URL is absent; using non-persistent demo memory");
+async function startServer(): Promise<void> {
+  await initializeGoogleOAuth();
+  curator.start();
+  if (memoryObserver) void memoryObserver.start().catch((error) => console.error("Memory observer listener failed:", error));
+  app.listen(PORT, () => {
+    console.log(`Meet Agent backend running on http://localhost:${PORT}`);
+    if (!isDatabaseConfigured()) console.warn("DATABASE_URL is absent; using non-persistent demo memory");
+  });
+}
+
+void startServer().catch((error) => {
+  console.error("Meet Agent failed to start:", error);
+  process.exit(1);
 });

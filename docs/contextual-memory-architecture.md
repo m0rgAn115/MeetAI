@@ -95,9 +95,10 @@ Además, cada fuente aplica su `permissions_snapshot`; una fuente restringida
 solo aparece si `allowedUserIds` contiene al usuario verificado. Las búsquedas
 de Drive usan el OAuth del usuario que Google ya autorizó.
 
-El almacenamiento OAuth de Google sigue siendo global y en memoria, como en el
-MVP original. Debe moverse a una tabla cifrada por usuario antes de un despliegue
-multiusuario.
+La conexión OAuth de Google se cifra y persiste en PostgreSQL por workspace y
+usuario, incluido el refresh token. El MVP local restaura esa conexión al
+arrancar; un despliegue multiusuario todavía debe asociar el callback mediante
+un parámetro `state` firmado.
 
 ## Estado de las diez fases
 
@@ -118,8 +119,7 @@ multiusuario.
   endpoint de segmentos ya desacopla esta capa; la siguiente iteración debe
   añadir un service worker/offscreen document para `chrome.tabCapture` y un STT
   con diarización, manteniendo el mismo evento final.
-- Los tokens Google deben persistirse cifrados por usuario y OAuth debe incluir
-  `state` firmado.
+- OAuth debe incluir `state` firmado antes de un despliegue multiusuario.
 - La expansión del grafo está limitada a un salto de forma deliberada.
 - La demo heurística permite trabajar sin claves. Los prompts versionados deben
   evaluarse con grabaciones reales antes de fijar umbrales de producción.
