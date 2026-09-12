@@ -10,7 +10,8 @@
         "https://meet.google.com/*"
       ],
       "js": [
-        "content.js"
+        "content.js",
+        "chat.js"
       ],
       "css": [
         "styles.css"

@@ -1921,22 +1921,31 @@ function renderAgentEvent(
   lastAgentEvent = event;
 
 
-  const panel =
-    document.getElementById(
-      "meet-agent-panel"
+  // While the person is using the chat, render the card hidden;
+  // closeAgentPanel shows it once the panel closes.
+  if (
+    !(panelOpen &&
+      typeof isAgentChatInUse === "function" &&
+      isAgentChatInUse())
+  ) {
+
+    const panel =
+      document.getElementById(
+        "meet-agent-panel"
+      );
+
+
+    panel.classList.add(
+      "hidden"
     );
 
-
-  panel.classList.add(
-    "hidden"
-  );
-
-  panelOpen = false;
+    panelOpen = false;
 
 
-  container.classList.remove(
-    "hidden"
-  );
+    container.classList.remove(
+      "hidden"
+    );
+  }
 
   requestAnimationFrame(() => {
     clampElementToViewport(
