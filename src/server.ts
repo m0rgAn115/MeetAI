@@ -16,6 +16,11 @@ import {
 } from "./drive";
 
 import {
+  searchGmailMessages,
+  sendGmailMessage,
+} from "./gmail";
+
+import {
   processTranscript,
   resetMeetingMemory,
 } from "./agent";
@@ -156,6 +161,8 @@ app.post("/analyze", async (req, res) => {
 
     let driveResults: any[] = [];
 
+    let gmailResults: any[] = [];
+
 
     if (
       event.type === "file_search" &&
@@ -171,7 +178,9 @@ app.post("/analyze", async (req, res) => {
 
         driveResults =
           await searchDriveFiles(
-            event.driveQuery
+            event.driveQuery,
+            event.driveModifiedAfter,
+            event.driveModifiedBefore
           );
 
 
@@ -188,6 +197,92 @@ app.post("/analyze", async (req, res) => {
         );
       }
     }
+
+
+    if (
+      event.type === "email_search" &&
+      event.emailQuery
+    ) {
+
+      try {
+
+        console.log(
+          `📧 Agent searching Gmail for: ${event.emailQuery}`
+        );
+
+
+        gmailResults =
+          await searchGmailMessages(
+            event.emailQuery
+          );
+
+
+        console.log(
+          `📧 Agent found ${gmailResults.length} Gmail message(s)`
+        );
+
+
+      } catch (error) {
+
+        console.error(
+          "Automatic Gmail search failed:",
+          error
+        );
+      }
+    }
+
+
+    // If the agent drafted an email that should reference a
+    // Drive file, look it up and attach its link to the body.
+    if (
+      event.type === "email_draft" &&
+      event.driveQuery
+    ) {
+
+      try {
+
+        console.log(
+          `📁 Looking up Drive file for email draft: ${event.driveQuery}`
+        );
+
+
+        const driveMatches =
+          await searchDriveFiles(
+            event.driveQuery,
+            event.driveModifiedAfter,
+            event.driveModifiedBefore
+          );
+
+
+        const topMatch =
+          driveMatches[0];
+
+
+        if (topMatch && event.emailBody) {
+
+          event.emailBody = `${event.emailBody}\n\n${topMatch.name}:\n${topMatch.webViewLink}`;
+
+          console.log(
+            `📁 Attached Drive link to email draft: ${topMatch.name}`
+          );
+
+        } else {
+
+          console.log(
+            "📁 No matching Drive file found for email draft"
+          );
+        }
+
+
+      } catch (error) {
+
+        console.error(
+          "Automatic Drive lookup for email draft failed:",
+          error
+        );
+      }
+    }
+
 
     if (
       isGoogleCalendarConnected() &&
@@ -228,6 +323,7 @@ app.post("/analyze", async (req, res) => {
       ...event,
       calendarConflict,
       driveResults,
+      gmailResults,
     });
 
 
@@ -565,6 +661,152 @@ app.post(
       return res.status(500).json({
         error:
           "Failed to search Google Drive",
+      });
+    }
+  }
+);
+
+// ============================================================
+// GMAIL SEARCH
+// ============================================================
+
+app.post(
+  "/gmail/search",
+  async (req, res) => {
+
+    try {
+
+      const {
+        query,
+      } = req.body;
+
+
+      if (
+        !query ||
+        typeof query !== "string"
+      ) {
+
+        return res.status(400).json({
+          error:
+            "query is required",
+        });
+      }
+
+
+      console.log(
+        `📧 Searching Gmail for: ${query}`
+      );
+
+
+      const messages =
+        await searchGmailMessages(
+          query
+        );
+
+
+      console.log(
+        `📧 Gmail results: ${messages.length}`
+      );
+
+
+      return res.json({
+        success: true,
+        messages,
+      });
+
+
+    } catch (error) {
+
+      console.error(
+        "Gmail search error:",
+        error
+      );
+
+
+      return res.status(500).json({
+        error:
+          "Failed to search Gmail",
+      });
+    }
+  }
+);
+
+// ============================================================
+// GMAIL SEND
+// ============================================================
+//
+// This endpoint only fires when the user explicitly confirms
+// sending from the extension UI — the agent never calls this
+// automatically, it only prepares a draft.
+
+app.post(
+  "/gmail/send",
+  async (req, res) => {
+
+    try {
+
+      if (
+        !isGoogleCalendarConnected()
+      ) {
+
+        return res.status(401).json({
+          error:
+            "Google account is not connected",
+        });
+      }
+
+
+      const {
+        to,
+        subject,
+        body,
+      } = req.body;
+
+
+      if (
+        !to ||
+        !subject ||
+        !body
+      ) {
+
+        return res.status(400).json({
+          error:
+            "to, subject and body are required",
+        });
+      }
+
+
+      const result =
+        await sendGmailMessage(
+          to,
+          subject,
+          body
+        );
+
+
+      console.log(
+        "📧 Gmail message sent:",
+        result
+      );
+
+
+      return res.json({
+        success: true,
+        result,
+      });
+
+
+    } catch (error) {
+
+      console.error(
+        "Gmail send error:",
+        error
+      );
+
+
+      return res.status(500).json({
+        error:
+          "Failed to send Gmail message",
       });
     }
   }
