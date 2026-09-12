@@ -24,6 +24,7 @@ import { MemoryStore } from "./memory/store";
 import { NullEmbeddingProvider, OpenAIEmbeddingProvider } from "./services/embeddings";
 import { KnowledgeRetrievalService } from "./services/retrieval";
 import { searchGmailMessages, sendGmailMessage } from "./gmail";
+import { sendSlackMessage } from "./slack";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 3000);
@@ -371,6 +372,18 @@ app.post("/gmail/send", async (req, res) => {
     const { to, subject, body } = req.body ?? {};
     if (!to || !subject || !body) throw new Error("to, subject and body are required");
     return res.json({ success: true, result: await sendGmailMessage(to, subject, body) });
+  } catch (error) { return sendError(res, error); }
+});
+
+// This only fires when the user explicitly clicks "Notify Slack" in the
+// extension — never automatically.
+app.post("/slack/notify", async (req, res) => {
+  try {
+    await authenticateRequest(req);
+    const text = String(req.body?.text ?? "").trim();
+    if (!text) throw new Error("text is required");
+    await sendSlackMessage(text);
+    return res.json({ success: true });
   } catch (error) { return sendError(res, error); }
 });
 

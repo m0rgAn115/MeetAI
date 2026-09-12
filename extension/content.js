@@ -1603,6 +1603,127 @@ function setupGmailSendButton() {
 
 
 // ============================================================
+// SEND SLACK NOTIFICATION
+// ============================================================
+//
+// Only fires when the user clicks "Notify Slack" — never
+// automatically.
+
+async function sendSlackFromAgent(
+  text
+) {
+
+  const response = await fetch(
+    "http://localhost:3000/slack/notify",
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json",
+      },
+
+      body: JSON.stringify({
+        text,
+      }),
+    }
+  );
+
+
+  if (!response.ok) {
+
+    const error =
+      await response.json();
+
+
+    throw new Error(
+      error.error ??
+      `Backend returned ${response.status}`
+    );
+  }
+
+
+  return await response.json();
+}
+
+
+// ============================================================
+// SLACK NOTIFY BUTTON
+// ============================================================
+
+function setupSlackButton(
+  text
+) {
+
+  const button =
+    document.getElementById(
+      "meet-agent-notify-slack"
+    );
+
+
+  if (!button) {
+    return;
+  }
+
+
+  button.addEventListener(
+    "click",
+    async () => {
+
+      const originalText =
+        button.textContent;
+
+
+      button.disabled = true;
+
+      button.textContent =
+        "Sending...";
+
+
+      try {
+
+        await sendSlackFromAgent(
+          text
+        );
+
+
+        button.textContent =
+          "✓ Sent to Slack";
+
+
+        console.log(
+          "💬 Notified Slack"
+        );
+
+
+      } catch (error) {
+
+        console.error(
+          "Slack notify error:",
+          error
+        );
+
+
+        button.disabled = false;
+
+        button.textContent =
+          "Slack error — retry";
+
+
+        setTimeout(
+          () => {
+
+            button.textContent =
+              originalText;
+          },
+          2500
+        );
+      }
+    }
+  );
+}
+
+
+// ============================================================
 // RECOMMENDATION DISMISS / HIDE
 // ============================================================
 
@@ -2446,6 +2567,13 @@ function renderAgentEvent(
             : ""
         }
 
+        <button
+          id="meet-agent-notify-slack"
+          class="meet-agent-action-button"
+        >
+          Notify Slack
+        </button>
+
       </div>
     `;
 
@@ -2459,6 +2587,11 @@ function renderAgentEvent(
         event
       );
     }
+
+
+    setupSlackButton(
+      `✅ *Commitment*: ${event.owner ?? event.speaker ?? "Unknown"} — ${event.action ?? "Unknown"} (${displayDate})`
+    );
 
 
     return;
@@ -2573,6 +2706,13 @@ function renderAgentEvent(
             : ""
         }
 
+        <button
+          id="meet-agent-notify-slack"
+          class="meet-agent-action-button"
+        >
+          Notify Slack
+        </button>
+
       </div>
     `;
 
@@ -2586,6 +2726,11 @@ function renderAgentEvent(
         event
       );
     }
+
+
+    setupSlackButton(
+      `📌 *Action item*: ${event.action ?? event.summary ?? "Unknown"} — Owner: ${event.owner ?? "Unassigned"} (${displayDate})`
+    );
 
 
     return;
