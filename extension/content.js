@@ -10,6 +10,17 @@ let panelOpen = false;
 let lastAgentEvent = null;
 let activeCalendarEventId = null;
 
+// True once the user explicitly turns the agent off during a
+// live call. While true, the auto-detector must never turn it
+// back on for that same call — only the user's own toggle can.
+// It resets automatically once the call actually ends.
+let userManuallyStopped = false;
+
+// Drive files the user has already opened this session, so the
+// "Open" button can show a confirmed/green state instead of
+// looking the same every time the card re-renders.
+const openedDriveFileKeys = new Set();
+
 const captionTimers = new Map();
 const lastSentCaptions = new Map();
 
@@ -19,6 +30,229 @@ const chatMessageTimers = new Map();
 const processedChatMessageIds = new Set();
 
 const CHAT_MESSAGE_DEBOUNCE_MS = 800;
+
+
+// ============================================================
+// ICONS
+// ============================================================
+// Small line icons, colored via CSS (currentColor) so each
+// event type picks up its own accent from styles.css.
+
+function agentIcon(name) {
+
+  const icons = {
+    commitment: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`,
+    action: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>`,
+    change: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`,
+    contradiction: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 16.5h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>`,
+    drive: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`,
+    file: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>`,
+  };
+
+  return icons[name] ?? "";
+}
+
+
+// ============================================================
+// ADAPTIVE PANEL POSITIONING
+// ============================================================
+// The panel/recommendation card must never spill off-screen,
+// regardless of where the bubble (FAB) was dropped. We detect
+// which quadrant the bubble occupies and flip the panel's
+// opening direction accordingly, then do a final pixel-level
+// clamp in case the flip alone isn't enough (e.g. bubble
+// dragged very close to a corner).
+
+const MA_EDGE_MARGIN = 12;
+
+function updatePanelOrientation() {
+
+  const root =
+    document.getElementById(
+      "meet-agent-root"
+    );
+
+  if (!root) {
+    return;
+  }
+
+  const rect =
+    root.getBoundingClientRect();
+
+  const bubbleCenterX =
+    rect.left + rect.width / 2;
+
+  const bubbleCenterY =
+    rect.top + rect.height / 2;
+
+  const isRightHalf =
+    bubbleCenterX >
+    window.innerWidth / 2;
+
+  const isBottomHalf =
+    bubbleCenterY >
+    window.innerHeight / 2;
+
+  // Bubble on the right → panel opens left.
+  // Bubble on the left → panel opens right.
+  root.classList.toggle(
+    "ma-open-left",
+    isRightHalf
+  );
+
+  root.classList.toggle(
+    "ma-open-right",
+    !isRightHalf
+  );
+
+  // Bubble on the bottom → panel opens upward.
+  // Bubble on the top → panel opens downward.
+  root.classList.toggle(
+    "ma-open-up",
+    isBottomHalf
+  );
+
+  root.classList.toggle(
+    "ma-open-down",
+    !isBottomHalf
+  );
+}
+
+
+function clampElementToViewport(
+  element
+) {
+
+  if (
+    !element ||
+    element.classList.contains(
+      "hidden"
+    )
+  ) {
+
+    return;
+  }
+
+  // Reset any previous clamp offset before measuring again.
+  element.style.transform = "";
+
+  const rect =
+    element.getBoundingClientRect();
+
+  let dx = 0;
+  let dy = 0;
+
+  if (rect.left < MA_EDGE_MARGIN) {
+
+    dx =
+      MA_EDGE_MARGIN - rect.left;
+
+  } else if (
+    rect.right >
+    window.innerWidth -
+      MA_EDGE_MARGIN
+  ) {
+
+    dx =
+      (window.innerWidth -
+        MA_EDGE_MARGIN) -
+      rect.right;
+  }
+
+  if (rect.top < MA_EDGE_MARGIN) {
+
+    dy =
+      MA_EDGE_MARGIN - rect.top;
+
+  } else if (
+    rect.bottom >
+    window.innerHeight -
+      MA_EDGE_MARGIN
+  ) {
+
+    dy =
+      (window.innerHeight -
+        MA_EDGE_MARGIN) -
+      rect.bottom;
+  }
+
+  if (dx !== 0 || dy !== 0) {
+
+    element.style.transform =
+      `translate(${dx}px, ${dy}px)`;
+  }
+}
+
+
+function repositionFloatingUI() {
+
+  updatePanelOrientation();
+
+  // Wait a frame so the orientation classes above have been
+  // applied and layout has settled before measuring for clamp.
+  requestAnimationFrame(() => {
+
+    clampElementToViewport(
+      document.getElementById(
+        "meet-agent-panel"
+      )
+    );
+
+    clampElementToViewport(
+      document.getElementById(
+        "meet-agent-recommendation"
+      )
+    );
+  });
+}
+
+
+window.addEventListener(
+  "resize",
+  repositionFloatingUI
+);
+
+
+// ============================================================
+// PERSONALIZED SPEAKER DISPLAY
+// ============================================================
+
+function updateSpeakerDisplay(
+  name
+) {
+
+  const row =
+    document.getElementById(
+      "meet-agent-speaker-row"
+    );
+
+  const label =
+    document.getElementById(
+      "meet-agent-speaker-name"
+    );
+
+  if (!row || !label) {
+    return;
+  }
+
+  if (!name) {
+
+    row.classList.add(
+      "hidden"
+    );
+
+    label.textContent = "";
+
+    return;
+  }
+
+  label.textContent =
+    `With ${name}`;
+
+  row.classList.remove(
+    "hidden"
+  );
+}
 
 
 // ============================================================
@@ -69,8 +303,23 @@ function createMeetAgentPanel() {
       class="meet-agent-window hidden"
     >
 
-      <div class="meet-agent-header">
-        ✦ Meet Agent
+      <div class="meet-agent-header-row">
+
+        <div class="meet-agent-header">
+          ✦ Meet Agent
+        </div>
+
+        <button
+          id="meet-agent-toggle"
+          class="meet-agent-toggle"
+          type="button"
+          role="switch"
+          aria-checked="false"
+          aria-label="Turn Meet Agent on or off"
+        >
+          <span class="meet-agent-toggle-thumb"></span>
+        </button>
+
       </div>
 
 
@@ -88,47 +337,16 @@ function createMeetAgentPanel() {
       </div>
 
 
-      <div class="meet-agent-controls">
-
-        <button id="meet-agent-start">
-          Start Agent
-        </button>
-
-        <button
-          id="meet-agent-stop"
-          disabled
-        >
-          Stop
-        </button>
-
-      </div>
-
-
-      <div class="meet-agent-form">
-
-        <input
-          id="meet-agent-speaker"
-          type="text"
-          placeholder="Speaker"
-          value="Ana"
-        />
-
-
-        <textarea
-          id="meet-agent-text"
-          placeholder="Debug transcript"
-        ></textarea>
-
-
-        <button id="meet-agent-analyze">
-          Analyze manually
-        </button>
-
+      <div
+        id="meet-agent-speaker-row"
+        class="meet-agent-speaker-row hidden"
+      >
+        <span id="meet-agent-speaker-name"></span>
       </div>
 
 
       <div id="meet-agent-result">
-        Start the agent to begin listening.
+        Waiting to join a call.
       </div>
 
     </div>
@@ -147,6 +365,12 @@ function createMeetAgentPanel() {
 
 
   document.body.appendChild(root);
+
+
+  root.classList.add(
+    "ma-open-left",
+    "ma-open-down"
+  );
 
 
   setupPanelListeners();
@@ -174,6 +398,11 @@ function openAgentPanel() {
 
 
   recommendation.classList.add("hidden");
+
+
+  requestAnimationFrame(() => {
+    clampElementToViewport(panel);
+  });
 }
 
 
@@ -203,6 +432,12 @@ function closeAgentPanel() {
     recommendation.classList.remove(
       "hidden"
     );
+
+    requestAnimationFrame(() => {
+      clampElementToViewport(
+        recommendation
+      );
+    });
   }
 }
 
@@ -304,7 +539,7 @@ function setupFloatingAgent() {
       }
 
 
-      const bubbleSize = 58;
+      const bubbleSize = 44;
 
 
       const newLeft =
@@ -357,7 +592,11 @@ function setupFloatingAgent() {
       );
 
 
-      if (!actuallyDragged) {
+      if (actuallyDragged) {
+
+        repositionFloatingUI();
+
+      } else {
 
         toggleAgentPanel();
       }
@@ -372,224 +611,184 @@ function setupFloatingAgent() {
 
 function setupPanelListeners() {
 
-  const startButton =
-    document.getElementById("meet-agent-start");
+  const toggle =
+    document.getElementById(
+      "meet-agent-toggle"
+    );
 
-  const stopButton =
-    document.getElementById("meet-agent-stop");
+  if (!toggle) {
+    return;
+  }
 
-  const analyzeButton =
-    document.getElementById("meet-agent-analyze");
-
-
-  // ----------------------------------------------------------
-  // START
-  // ----------------------------------------------------------
-
-  startButton.addEventListener(
+  toggle.addEventListener(
     "click",
-    async () => {
+    () => {
 
-      const resultContainer =
-        document.getElementById("meet-agent-result");
-
-
-      try {
-
-        resultContainer.innerHTML = `
-          <div class="meet-agent-loading">
-            Starting agent...
-          </div>
-        `;
-
-
-        const response = await fetch(
-          "http://localhost:3000/meeting/start",
-          {
-            method: "POST",
-          }
-        );
-
-
-        if (!response.ok) {
-
-          throw new Error(
-            `Backend returned ${response.status}`
-          );
-        }
-
-
-        clearCaptionMemory();
-
-        activeCalendarEventId = null;
-        hideRecommendation(true);
-
-        updateMeetingUI(true);
-        closeAgentPanel();
-
-
-        console.log(
-          "🟢 Meet Agent started"
-        );
-
-
-      } catch (error) {
-
-        console.error(
-          "Could not start Meet Agent:",
-          error
-        );
-
-
-        resultContainer.innerHTML = `
-          <div class="meet-agent-error">
-            Could not start the agent.
-          </div>
-        `;
-      }
-    }
-  );
-
-
-  // ----------------------------------------------------------
-  // STOP
-  // ----------------------------------------------------------
-
-  stopButton.addEventListener(
-    "click",
-    async () => {
-
-      const resultContainer =
-        document.getElementById("meet-agent-result");
-
-
-      try {
-
-        const response = await fetch(
-          "http://localhost:3000/meeting/end",
-          {
-            method: "POST",
-          }
-        );
-
-
-        if (!response.ok) {
-
-          throw new Error(
-            `Backend returned ${response.status}`
-          );
-        }
-
-
-        clearCaptionMemory();
-
-        activeCalendarEventId = null;
-        hideRecommendation(true);
-
-        updateMeetingUI(false);
-
-
-        console.log(
-          "🔴 Meet Agent stopped"
-        );
-
-
-      } catch (error) {
-
-        console.error(
-          "Could not stop Meet Agent:",
-          error
-        );
-
-
-        resultContainer.innerHTML = `
-          <div class="meet-agent-error">
-            Could not stop the agent.
-          </div>
-        `;
-      }
-    }
-  );
-
-
-  // ----------------------------------------------------------
-  // MANUAL ANALYZE
-  // ----------------------------------------------------------
-
-  analyzeButton.addEventListener(
-    "click",
-    async () => {
-
-      const resultContainer =
-        document.getElementById("meet-agent-result");
-
-
-      const speaker =
-        document
-          .getElementById("meet-agent-speaker")
-          .value
-          .trim();
-
-
-      const text =
-        document
-          .getElementById("meet-agent-text")
-          .value
-          .trim();
-
-
-      if (!speaker || !text) {
+      if (toggle.disabled) {
         return;
       }
 
+      if (meetingActive) {
 
-      if (!meetingActive) {
+        // Explicit manual stop — the auto-detector must respect
+        // this for the rest of the call.
+        userManuallyStopped = true;
 
-        resultContainer.innerHTML = `
-          <div class="meet-agent-error">
-            Start the agent first.
-          </div>
-        `;
+        stopAgent();
 
-        return;
+      } else {
+
+        // Explicit manual start clears any earlier override.
+        userManuallyStopped = false;
+
+        startAgent();
       }
+    }
+  );
+}
 
+
+// ============================================================
+// START AGENT
+// ============================================================
+// Shared by the manual "Start Agent" button and by the
+// auto-detection of a live Google Meet call.
+
+async function startAgent() {
+
+  if (meetingActive) {
+    return;
+  }
+
+  const resultContainer =
+    document.getElementById("meet-agent-result");
+
+
+  try {
+
+    if (resultContainer) {
 
       resultContainer.innerHTML = `
         <div class="meet-agent-loading">
-          Analyzing...
+          Starting agent...
         </div>
       `;
-
-
-      try {
-
-        const event =
-          await sendTranscriptToBackend(
-            speaker,
-            text
-          );
-
-
-        renderAgentEvent(event);
-
-
-      } catch (error) {
-
-        console.error(
-          "Manual analysis failed:",
-          error
-        );
-
-
-        resultContainer.innerHTML = `
-          <div class="meet-agent-error">
-            Could not analyze transcript.
-          </div>
-        `;
-      }
     }
-  );
+
+
+    const response = await fetch(
+      "http://localhost:3000/meeting/start",
+      {
+        method: "POST",
+      }
+    );
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        `Backend returned ${response.status}`
+      );
+    }
+
+
+    clearCaptionMemory();
+
+    activeCalendarEventId = null;
+    hideRecommendation(true);
+
+    updateMeetingUI(true);
+    closeAgentPanel();
+
+
+    console.log(
+      "🟢 Meet Agent started"
+    );
+
+
+  } catch (error) {
+
+    console.error(
+      "Could not start Meet Agent:",
+      error
+    );
+
+
+    if (resultContainer) {
+
+      resultContainer.innerHTML = `
+        <div class="meet-agent-error">
+          Could not start the agent.
+        </div>
+      `;
+    }
+  }
+}
+
+
+// ============================================================
+// STOP AGENT
+// ============================================================
+
+async function stopAgent() {
+
+  if (!meetingActive) {
+    return;
+  }
+
+  const resultContainer =
+    document.getElementById("meet-agent-result");
+
+
+  try {
+
+    const response = await fetch(
+      "http://localhost:3000/meeting/end",
+      {
+        method: "POST",
+      }
+    );
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        `Backend returned ${response.status}`
+      );
+    }
+
+
+    clearCaptionMemory();
+
+    activeCalendarEventId = null;
+    hideRecommendation(true);
+
+    updateMeetingUI(false);
+    updateSpeakerDisplay(null);
+
+
+    console.log(
+      "🔴 Meet Agent stopped"
+    );
+
+
+  } catch (error) {
+
+    console.error(
+      "Could not stop Meet Agent:",
+      error
+    );
+
+
+    if (resultContainer) {
+
+      resultContainer.innerHTML = `
+        <div class="meet-agent-error">
+          Could not stop the agent.
+        </div>
+      `;
+    }
+  }
 }
 
 
@@ -601,19 +800,19 @@ function updateMeetingUI(active) {
 
   meetingActive = active;
 
+  const bubble =
+    document.getElementById(
+      "meet-agent-bubble"
+    );
+
   const bubbleStatus =
     document.getElementById(
       "meet-agent-bubble-status"
     );
 
-  const startButton =
+  const toggle =
     document.getElementById(
-      "meet-agent-start"
-    );
-
-  const stopButton =
-    document.getElementById(
-      "meet-agent-stop"
+      "meet-agent-toggle"
     );
 
   const statusText =
@@ -633,6 +832,10 @@ function updateMeetingUI(active) {
 
 
   if (active) {
+
+    bubble.classList.add(
+      "is-listening"
+    );
 
     bubbleStatus.classList.remove(
       "inactive"
@@ -656,18 +859,26 @@ function updateMeetingUI(active) {
     );
 
 
-    startButton.disabled = true;
-    stopButton.disabled = false;
+    if (toggle) {
+
+      toggle.setAttribute(
+        "aria-checked",
+        "true"
+      );
+    }
 
 
     resultContainer.innerHTML = `
       <div class="meet-agent-silent">
-        👂 Listening for meeting context...
       </div>
     `;
 
 
   } else {
+
+    bubble.classList.remove(
+      "is-listening"
+    );
 
     bubbleStatus.classList.remove(
       "active"
@@ -691,8 +902,13 @@ function updateMeetingUI(active) {
     );
 
 
-    startButton.disabled = false;
-    stopButton.disabled = true;
+    if (toggle) {
+
+      toggle.setAttribute(
+        "aria-checked",
+        "false"
+      );
+    }
 
 
     resultContainer.innerHTML = `
@@ -1020,8 +1236,12 @@ function setupCalendarButton(
           result.event.id;
 
 
+        button.classList.add(
+          "meet-agent-action-button--success"
+        );
+
         button.textContent =
-          "✓ Added to Calendar";
+          "✓ Scheduled";
 
 
         console.log(
@@ -1117,8 +1337,12 @@ function setupCalendarUpdateButton(
         );
 
 
+        button.classList.add(
+          "meet-agent-action-button--success"
+        );
+
         button.textContent =
-          "✓ Calendar updated";
+          "✓ Updated";
 
 
         console.log(
@@ -1248,6 +1472,12 @@ function renderAgentEvent(
     "hidden"
   );
 
+  requestAnimationFrame(() => {
+    clampElementToViewport(
+      container
+    );
+  });
+
   // ----------------------------------------------------------
   // DRIVE FILE SEARCH
   // ----------------------------------------------------------
@@ -1265,7 +1495,7 @@ function renderAgentEvent(
 
 
     container.innerHTML = `
-      <div class="meet-agent-card">
+      <div class="meet-agent-card meet-agent-card--drive">
 
         <button
           id="meet-agent-dismiss"
@@ -1279,7 +1509,7 @@ function renderAgentEvent(
 
 
         <div class="meet-agent-card-title">
-          📁 Drive search
+          ${agentIcon("drive")} Drive search
         </div>
 
 
@@ -1330,7 +1560,7 @@ function renderAgentEvent(
                               "Untitled file"
                             )}"
                           >
-                            📄
+                            ${agentIcon("file")}
                             ${escapeHtml(
                               file.name ??
                               "Untitled file"
@@ -1384,11 +1614,26 @@ function renderAgentEvent(
                                 class="
                                   meet-agent-drive-open
                                   meet-agent-open-drive
+                                  ${
+                                    openedDriveFileKeys.has(
+                                      file.id ??
+                                      file.webViewLink
+                                    )
+                                      ? "meet-agent-drive-open--opened"
+                                      : ""
+                                  }
                                 "
                                 data-drive-index="${index}"
                                 title="Open in Google Drive"
                               >
-                                Open
+                                ${
+                                  openedDriveFileKeys.has(
+                                    file.id ??
+                                    file.webViewLink
+                                  )
+                                    ? "✓ Opened"
+                                    : "Open"
+                                }
                               </button>
                             `
                             : ""
@@ -1443,6 +1688,18 @@ function renderAgentEvent(
                   "_blank",
                   "noopener,noreferrer"
                 );
+
+                openedDriveFileKeys.add(
+                  file.id ??
+                  file.webViewLink
+                );
+
+                button.classList.add(
+                  "meet-agent-drive-open--opened"
+                );
+
+                button.textContent =
+                  "✓ Opened";
               }
             }
           );
@@ -1481,7 +1738,7 @@ function renderAgentEvent(
 
 
     container.innerHTML = `
-      <div class="meet-agent-card">
+      <div class="meet-agent-card meet-agent-card--commitment">
 
         <button
           id="meet-agent-dismiss"
@@ -1494,7 +1751,7 @@ function renderAgentEvent(
         </button>
 
         <div class="meet-agent-card-title">
-          ✅ Commitment detected
+          ${agentIcon("commitment")} Commitment detected
         </div>
 
         <div>
@@ -1617,7 +1874,7 @@ function renderAgentEvent(
 
 
     container.innerHTML = `
-      <div class="meet-agent-card">
+      <div class="meet-agent-card meet-agent-card--action">
 
         <button
           id="meet-agent-dismiss"
@@ -1630,7 +1887,7 @@ function renderAgentEvent(
         </button>
 
         <div class="meet-agent-card-title">
-          📌 Action item
+          ${agentIcon("action")} Action item
         </div>
 
         <div>
@@ -1638,14 +1895,6 @@ function renderAgentEvent(
             event.action ??
             event.summary ??
             ""
-          )}
-        </div>
-
-        <div>
-          <strong>Owner:</strong>
-          ${escapeHtml(
-            event.owner ??
-            "Unassigned"
           )}
         </div>
 
@@ -1741,7 +1990,7 @@ function renderAgentEvent(
 
 
     container.innerHTML = `
-      <div class="meet-agent-card">
+      <div class="meet-agent-card meet-agent-card--change">
 
         <button
           id="meet-agent-dismiss"
@@ -1754,7 +2003,7 @@ function renderAgentEvent(
         </button>
 
         <div class="meet-agent-card-title">
-          🕒 Change suggested
+          ${agentIcon("change")} Change suggested
         </div>
 
         <div>
@@ -1818,7 +2067,7 @@ function renderAgentEvent(
   ) {
 
     container.innerHTML = `
-      <div class="meet-agent-card">
+      <div class="meet-agent-card meet-agent-card--contradiction">
 
         <button
           id="meet-agent-dismiss"
@@ -1831,7 +2080,7 @@ function renderAgentEvent(
         </button>
 
         <div class="meet-agent-card-title">
-          ⚠️ Possible contradiction
+          ${agentIcon("contradiction")} Possible contradiction
         </div>
 
         <div>
@@ -1948,6 +2197,11 @@ function scanMeetCaptions() {
 
         return;
       }
+
+
+      updateSpeakerDisplay(
+        speaker
+      );
 
 
       scheduleCaptionAnalysis(
@@ -2307,7 +2561,183 @@ console.log(
 
 
 // ============================================================
+// AUTO-START ON MEET CALL DETECTION
+// ============================================================
+// No manual click required: as soon as we detect the user is
+// actually inside a live Meet call (not just the pre-join
+// lobby), the agent starts listening on its own.
+//
+// IMPORTANT: this only ever starts the agent automatically. It
+// never stops it automatically — an earlier version stopped the
+// agent whenever the "in call" heuristic failed to match (e.g.
+// wrong locale string), which killed manual sessions within
+// seconds. Stopping stays entirely under manual/explicit control
+// (the Stop button, or the backend's own end-of-meeting logic).
+
+// aria-label varies by Google account language, so we check a
+// handful of the most common ones. This list is best-effort —
+// see the language-independent check below for the real safety
+// net.
+const MEET_IN_CALL_ARIA_LABELS = [
+  "Leave call",
+  "Salir de la llamada",
+  "Abandonar la llamada",
+  "Sair da chamada",
+  "Quitter l'appel",
+  "Anruf verlassen",
+  "Turn off captions",
+  "Desactivar los subtítulos",
+  "Turn off microphone",
+  "Desactivar micrófono",
+  "Apagar micrófono",
+];
+
+const MEET_CALL_POLL_MS = 2000;
+
+function isInMeetCall() {
+
+  // 1) aria-label match (language dependent, best-effort).
+  const ariaMatch =
+    MEET_IN_CALL_ARIA_LABELS.some(
+      (label) =>
+        document.querySelector(
+          `[aria-label="${label}"]`
+        )
+    );
+
+  if (ariaMatch) {
+    return true;
+  }
+
+  // 2) Language-independent fallback: Google Meet renders its
+  // Material Symbols icons using a ligature font, so the literal
+  // text "call_end" sits in the DOM for the leave-call button
+  // regardless of the account's language.
+  const iconSpans =
+    document.querySelectorAll(
+      '.google-symbols, [class*="google-material-icons"], [class*="material-symbols"]'
+    );
+
+  for (const span of iconSpans) {
+
+    if (
+      span.textContent
+        ?.trim() === "call_end"
+    ) {
+
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Require several consecutive "not in call" polls before treating
+// the call as actually over. A single missed poll is normal DOM
+// flicker; several in a row (a few seconds) means you really left.
+const CALL_END_CONFIRM_POLLS = 3;
+
+let notInCallStreak = 0;
+
+function checkMeetCallState() {
+
+  const inCall =
+    isInMeetCall();
+
+  if (inCall) {
+
+    notInCallStreak = 0;
+
+    if (
+      !meetingActive &&
+      !userManuallyStopped
+    ) {
+
+      console.log(
+        "📞 Google Meet call detected — auto-starting agent"
+      );
+
+      startAgent();
+    }
+
+    return;
+  }
+
+
+  // Not currently detected as in-call.
+  notInCallStreak += 1;
+
+  if (
+    meetingActive &&
+    notInCallStreak >=
+      CALL_END_CONFIRM_POLLS
+  ) {
+
+    console.log(
+      "📴 Call ended — stopping agent"
+    );
+
+    stopAgent();
+
+    // A fresh call should auto-start again on its own.
+    userManuallyStopped = false;
+  }
+}
+
+setInterval(
+  checkMeetCallState,
+  MEET_CALL_POLL_MS
+);
+
+
+// Manual diagnostic: run `meetAgentInspectCallDetection()` in the
+// devtools console while inside a live Meet call to see exactly
+// which check matched (or didn't), so wrong selectors can be
+// fixed quickly instead of guessing.
+window.meetAgentInspectCallDetection =
+  function () {
+
+    const ariaHit =
+      MEET_IN_CALL_ARIA_LABELS.find(
+        (label) =>
+          document.querySelector(
+            `[aria-label="${label}"]`
+          )
+      );
+
+    const iconSpans =
+      document.querySelectorAll(
+        '.google-symbols, [class*="google-material-icons"], [class*="material-symbols"]'
+      );
+
+    const iconHit =
+      Array.from(iconSpans).find(
+        (span) =>
+          span.textContent
+            ?.trim() === "call_end"
+      );
+
+    console.log(
+      "meetAgentInspectCallDetection →",
+      {
+        result: isInMeetCall(),
+        matchedAriaLabel:
+          ariaHit ?? null,
+        matchedByIconLigature:
+          Boolean(iconHit),
+        iconSpansScanned:
+          iconSpans.length,
+      }
+    );
+
+    return isInMeetCall();
+  };
+
+
+// ============================================================
 // START EXTENSION UI
 // ============================================================
 
 createMeetAgentPanel();
+
+checkMeetCallState();

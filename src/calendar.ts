@@ -1,4 +1,6 @@
 import { google } from "googleapis";
+import fs from "fs";
+import path from "path";
 
 
 // Local shape for the fields we read off a Calendar API event.
@@ -47,13 +49,113 @@ export const googleOAuthClient =
 
 
 // ============================================================
-// TEMPORARY TOKEN STORAGE
+// PERSISTENT TOKEN STORAGE
 // ============================================================
 
-// Para el MVP guardamos los tokens en memoria.
-// Si reinicias el servidor tendrás que autorizar otra vez.
+// Tokens are cached in memory (fast) but also written to a local
+// JSON file, so restarting the backend (`npm run dev`) doesn't
+// force you to re-authorize with Google every time. Add this file
+// to .gitignore — it contains a live refresh token.
+
+const TOKEN_PATH =
+  path.join(
+    process.cwd(),
+    ".google-token.json"
+  );
+
 
 let googleTokens: any = null;
+
+
+function persistTokensToDisk() {
+
+  if (!googleTokens) {
+    return;
+  }
+
+  try {
+
+    fs.writeFileSync(
+      TOKEN_PATH,
+      JSON.stringify(
+        googleTokens,
+        null,
+        2
+      ),
+      "utf-8"
+    );
+
+  } catch (error) {
+
+    console.error(
+      "⚠️ Could not save Google token to disk:",
+      error
+    );
+  }
+}
+
+
+function loadTokensFromDisk() {
+
+  try {
+
+    if (
+      !fs.existsSync(TOKEN_PATH)
+    ) {
+
+      return;
+    }
+
+
+    const raw =
+      fs.readFileSync(
+        TOKEN_PATH,
+        "utf-8"
+      );
+
+    googleTokens =
+      JSON.parse(raw);
+
+    googleOAuthClient.setCredentials(
+      googleTokens
+    );
+
+    console.log(
+      "✅ Google Calendar re-authorized from saved token"
+    );
+
+  } catch (error) {
+
+    console.error(
+      "⚠️ Could not load saved Google token, you'll need to re-authorize:",
+      error
+    );
+
+    googleTokens = null;
+  }
+}
+
+
+// Load whatever we have on disk as soon as this module runs.
+loadTokensFromDisk();
+
+
+// google-auth-library silently refreshes the access token behind
+// the scenes using the refresh_token. Whenever that happens, this
+// event fires with the updated tokens — persist them so the fresh
+// access token survives a restart too.
+googleOAuthClient.on(
+  "tokens",
+  (tokens) => {
+
+    googleTokens = {
+      ...googleTokens,
+      ...tokens,
+    };
+
+    persistTokensToDisk();
+  }
+);
 
 
 // ============================================================
@@ -66,11 +168,13 @@ export function getGoogleAuthUrl() {
     access_type: "offline",
 
     prompt: "consent",
-
+    
     scope: [
-      "https://www.googleapis.com/auth/calendar.events",
-      "https://www.googleapis.com/auth/drive.metadata.readonly",
-    ],
+        "https://www.googleapis.com/auth/calendar.events",
+        "https://www.googleapis.com/auth/drive.metadata.readonly",
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.send",
+      ],
   });
 }
 
@@ -95,6 +199,9 @@ export async function saveGoogleAuthCode(
   googleOAuthClient.setCredentials(
     tokens
   );
+
+
+  persistTokensToDisk();
 
 
   console.log(
