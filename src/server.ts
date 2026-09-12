@@ -25,6 +25,7 @@ import { NullEmbeddingProvider, OpenAIEmbeddingProvider } from "./services/embed
 import { KnowledgeRetrievalService } from "./services/retrieval";
 import { searchGmailMessages, sendGmailMessage } from "./gmail";
 import { sendSlackMessage } from "./slack";
+import { AgentChatService, ChatRequestSchema, HeuristicChatModel, OpenAIChatModel } from "./agent-chat";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 3000);
@@ -49,6 +50,10 @@ const curator = new MemoryCuratorWorker(
 const actionExecutor = new ActionExecutor(
   store,
   demoMode ? new DemoCalendarGateway() : new GoogleCalendarGateway(),
+);
+const agentChat = new AgentChatService(
+  { store, retrieval, actions: actionExecutor, searchDrive: searchDriveFiles, searchGmail: searchGmailMessages },
+  useHeuristics ? new HeuristicChatModel() : new OpenAIChatModel(),
 );
 const activeMeetings = new Map<string, string>();
 const memoryObserver = isDatabaseConfigured() ? new MemoryObserver() : null;
@@ -274,6 +279,20 @@ app.post("/memory/retrieve", async (req, res) => {
     const evidence = await retrieval.retrieveContext({ ...context, query: String(req.body?.query ?? ""),
       asOf: req.body?.asOf, limit: req.body?.limit, includeDrive: Boolean(req.body?.includeDrive) });
     return res.json({ evidence });
+  } catch (error) { return sendError(res, error); }
+});
+
+// Written chat with the agent. Its tools only search or prepare drafts and
+// proposals; Calendar, Gmail and Slack still need an explicit click in the UI.
+app.post("/agent/chat", async (req, res) => {
+  try {
+    const context = await authenticateRequest(req);
+    const parsed = ChatRequestSchema.safeParse({
+      ...req.body,
+      meetingId: req.body?.meetingId ?? activeMeetings.get(identityKey(context)) ?? null,
+    });
+    if (!parsed.success) throw new Error("INVALID_CHAT_REQUEST");
+    return res.json(await agentChat.respond(context, parsed.data));
   } catch (error) { return sendError(res, error); }
 });
 
