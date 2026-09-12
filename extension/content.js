@@ -241,21 +241,31 @@ function updateSpeakerDisplay(
 
   if (!name) {
 
-    row.classList.add(
-      "hidden"
-    );
+    if (!row.classList.contains("hidden")) {
+      row.classList.add(
+        "hidden"
+      );
+    }
 
-    label.textContent = "";
+    if (label.textContent) {
+      label.textContent = "";
+    }
 
     return;
   }
 
-  label.textContent =
+  const nextLabel =
     `With ${name}`;
 
-  row.classList.remove(
-    "hidden"
-  );
+  if (label.textContent !== nextLabel) {
+    label.textContent = nextLabel;
+  }
+
+  if (row.classList.contains("hidden")) {
+    row.classList.remove(
+      "hidden"
+    );
+  }
 }
 
 
@@ -3299,12 +3309,58 @@ function scheduleChatMessageAnalysis(
 // WATCH GOOGLE MEET DOM
 // ============================================================
 
-const captionObserver =
-  new MutationObserver(
-    () => {
+let meetScanFrame = null;
+
+function mutationBelongsToMeetAgent(
+  mutation
+) {
+
+  const target =
+    mutation.target.nodeType === Node.ELEMENT_NODE
+      ? mutation.target
+      : mutation.target.parentElement;
+
+  return Boolean(
+    target?.closest?.(
+      "#meet-agent-root"
+    )
+  );
+}
+
+function scheduleMeetDomScan() {
+
+  if (meetScanFrame !== null) {
+    return;
+  }
+
+  meetScanFrame =
+    requestAnimationFrame(() => {
+
+      meetScanFrame = null;
 
       scanMeetCaptions();
       scanMeetChat();
+    });
+}
+
+const captionObserver =
+  new MutationObserver(
+    (mutations) => {
+
+      // Rendering our own panel also changes the page DOM. Ignore
+      // those records so the observer cannot feed back into itself.
+      if (
+        mutations.every(
+          mutationBelongsToMeetAgent
+        )
+      ) {
+        return;
+      }
+
+      // Meet emits many mutations while captions are being typed.
+      // One scan per animation frame is enough and avoids repeatedly
+      // traversing the full page for the same visual update.
+      scheduleMeetDomScan();
     }
   );
 
