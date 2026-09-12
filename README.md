@@ -1,356 +1,218 @@
-# ✦ Meet Agent
+# Meet Agent
 
-A proactive AI agent that lives directly inside Google Meet.
+Asistente silencioso para Google Meet con memoria organizacional temporal,
+recuperación trazable y acciones externas confirmadas por una persona.
 
-Meet Agent listens to the live meeting context, understands what people are discussing, and intervenes only when something useful happens — such as a commitment, action item, scheduling change, or contradiction.
+La arquitectura encontrada y las decisiones de integración están documentadas
+en [`docs/contextual-memory-architecture.md`](docs/contextual-memory-architecture.md).
 
-Instead of requiring users to explicitly talk to an AI assistant, Meet Agent observes the meeting and provides contextual actions at the right moment.
+## Componentes
 
-## Demo
+- Extensión Chrome MV3: observa subtítulos y chat finalizados, mantiene una sola
+  tarjeta contextual y envía feedback.
+- Express + TypeScript: recibe eventos de transcripción, coordina el Live
+  Copilot, expone recuperación y confirma acciones.
+- PostgreSQL/Supabase + pgvector: reuniones, evidencia, señales, grafo temporal,
+  ACL, trabajos y acciones.
+- Live Copilot: Observer y orquestador de intervención con salidas Zod.
+- Memory Curator: proceso en segundo plano con cola PostgreSQL idempotente.
+- Knowledge Retrieval: búsqueda híbrida, vigencia, ACL y expansión de un salto.
+- Action Executor: preview persistido y ejecución de Calendar tras confirmación.
 
-Examples:
+## Arranque real con Docker
 
-### Commitment
+El backend, PostgreSQL 16, pgvector y las migraciones están empaquetados en
+Compose. El perfil predeterminado usa OpenAI y Google reales; no carga datos
+demo ni simula Calendar.
 
-> "I'll schedule our meeting tomorrow at 2 PM."
-
-Meet Agent detects:
-
-- Owner
-- Action
-- Deadline
-- Calendar information
-
-and offers:
-
-**Add to Calendar**
-
-### Meeting change
-
-> "Actually, let's move it from 2 PM to 3 PM."
-
-Meet Agent understands that this refers to the previously discussed event and offers:
-
-**Update Calendar**
-
-The existing Google Calendar event is updated instead of creating a duplicate.
-
-### Action item
-
-> "We still need to prepare the demo video by Friday."
-
-Meet Agent can identify it as an action item and surface it proactively.
-
-### Contradiction
-
-If participants mention incompatible information during the same meeting, Meet Agent can flag the conflict.
-
----
-
-## How it works
-
-```text
-Google Meet
-    ↓
-Google Meet captions
-    ↓
-Chrome Extension
-    ↓
-Local Express Backend
-    ↓
-OpenAI Agent
-    ↓
-Structured meeting event
-    ↓
-Contextual UI inside Google Meet
-    ↓
-Google Calendar action
-```
-
-The agent keeps temporary context for the current meeting, allowing it to understand follow-up statements such as:
-
-```text
-"We'll meet Saturday at 2 PM."
-
-later...
-
-"Actually, make it 3 PM."
-```
-
----
-
-## Current features
-
-- Live Google Meet caption detection
-- Proactive AI analysis
-- Commitment detection
-- Action item detection
-- Meeting change detection
-- Contradiction detection
-- Meeting-level conversational memory
-- Google Calendar event creation
-- Google Calendar event updates
-- Floating draggable Meet Agent interface
-- Compact listening mode
-- Contextual recommendation cards
-- Manual transcript debug mode
-
----
-
-## Tech stack
-
-- OpenAI Agents SDK
-- TypeScript
-- Node.js
-- Express
-- Chrome Extension — Manifest V3
-- Google Meet captions
-- Google Calendar API
-- Google OAuth 2.0
-- Zod
-
----
-
-## Project structure
-
-```text
-meet-agent/
-│
-├── extension/
-│   ├── manifest.json
-│   ├── content.js
-│   └── styles.css
-│
-├── src/
-│   ├── agent.ts
-│   ├── calendar.ts
-│   ├── index.ts
-│   └── server.ts
-│
-├── .env.example
-├── .gitignore
-├── package.json
-├── package-lock.json
-└── README.md
-```
-
----
-
-## Setup
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/YOUR_USERNAME/meet-agent.git
-cd meet-agent
-```
-
-### 2. Install dependencies
-
-```bash
-npm install
-```
-
-### 3. Create environment variables
-
-Copy:
-
-```text
-.env.example
-```
-
-to:
-
-```text
-.env
-```
-
-Example:
+Configura `.env` antes de arrancar:
 
 ```env
-OPENAI_API_KEY=
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-5.6-luna
+OPENAI_CURATOR_MODEL=gpt-5.6-luna
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
 GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
+DEMO_MODE=false
+ALLOW_LOCAL_IDENTITY=true
+SEED_DEMO_DATA=false
 ```
 
-Never commit your real `.env` file.
+`ALLOW_LOCAL_IDENTITY=true` habilita una identidad local fija para probar en
+una sola computadora sin construir todavía una pantalla de login. No lo uses
+en un despliegue compartido.
 
----
-
-## Google Calendar setup
-
-Create a project in Google Cloud Console.
-
-Enable:
-
-```text
-Google Calendar API
+```bash
+docker compose up --build -d
+docker compose ps
+curl http://localhost:3000/health
 ```
 
-Create an OAuth 2.0 Client ID using:
+La respuesta de salud debe indicar `openai-structured-output`, `calendar:
+"google"`, `openAIConfigured: true` y `googleOAuthConfigured: true`.
 
-```text
-Application type:
-Web application
-```
-
-Add this redirect URI:
+En Google Cloud habilita **Google Calendar API** y **Google Drive API**. En el
+cliente OAuth de tipo aplicación web registra exactamente este redirect URI:
 
 ```text
 http://localhost:3000/auth/google/callback
 ```
 
-Put the generated Client ID and Client Secret inside `.env`.
-
-If the OAuth application is in Testing mode, add the Google accounts that will use the demo as test users.
-
----
-
-## Run the backend
+Con los contenedores activos, abre `http://localhost:3000/auth/google` en el
+navegador y concede acceso. Comprueba la sesión con:
 
 ```bash
+curl http://localhost:3000/calendar/status
+```
+
+Debe responder `{"connected":true}`. El token OAuth vive en memoria en este
+MVP, por lo que hay que reconectar Google si se reinicia el contenedor de la
+aplicación.
+
+## Visor de memoria local
+
+Con el stack Docker activo, abre `http://localhost:3000/memory-observer`.
+Muestra el grafo de memorias, sus fuentes y relaciones, y una actividad en vivo
+de creaciones, actualizaciones y recuperaciones. El visor conserva auditoría
+completa en PostgreSQL para depuración y los puertos del Compose se publican
+únicamente en localhost.
+
+La extensión no es un proceso de servidor: Chrome exige cargarla como MV3.
+Abre `chrome://extensions`, activa **Developer mode**, elige **Load unpacked**
+y selecciona la carpeta `extension/`. Después abre Meet, activa sus subtítulos
+y pulsa **Start Agent**. El backend queda publicado en `localhost:3000`.
+
+Para inspeccionar el grafo y la actividad mientras pruebas, abre
+`http://localhost:3000/memory-observer`.
+
+Para detener sin borrar memoria usa `docker compose down`. Para eliminar además
+el volumen PostgreSQL usa `docker compose down -v`.
+
+## Configuración sin Docker
+
+Requiere Node.js 22+, PostgreSQL con `pgvector`, una clave de OpenAI y, para
+Drive/Calendar, credenciales OAuth de Google.
+
+```bash
+npm install
+cp .env.example .env
+npm run db:migrate
+npm run db:seed
 npm run dev
 ```
 
-The backend runs at:
+Variables principales:
 
-```text
-http://localhost:3000
+```env
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.6-luna
+OPENAI_CURATOR_MODEL=gpt-5.6-luna
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+DATABASE_URL=postgresql://postgres:postgres@localhost:54322/postgres
+DATABASE_SSL=false
+SUPABASE_URL=
+SUPABASE_JWT_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
+MEETING_INTERVENTION_BUDGET=4
+CURATOR_POLL_INTERVAL_MS=1500
+ALLOW_DEMO_IDENTITY=false
+DEMO_MODE=false
 ```
 
-Test it with:
+Con Supabase, configura `SUPABASE_URL` para verificar JWT mediante JWKS. Para
+un proyecto que todavía use el secreto JWT simétrico, configura
+`SUPABASE_JWT_SECRET`. En un despliegue multiusuario establece
+`ALLOW_LOCAL_IDENTITY=false`; cada petición debe llevar `Authorization: Bearer
+<supabase-jwt>` y `x-workspace-id`.
 
-```text
-http://localhost:3000/health
+## Demo completa sin servicios externos
+
+La demo determinista recorre decisión anterior → posible cambio → evidencia →
+aclaración neutral → sustitución temporal → preview Calendar → confirmación:
+
+```bash
+npm run demo-memory
 ```
 
----
+Para probar la extensión contra el modo local sin PostgreSQL ni OpenAI:
 
-## Connect Google Calendar
+```bash
+DEMO_MODE=true ALLOW_DEMO_IDENTITY=true npm run dev
+```
 
-With the backend running, open:
+Después abre `chrome://extensions`, activa Developer mode, elige Load unpacked
+y selecciona `extension/`. Abre Meet, habilita subtítulos y pulsa Start Agent.
+
+Para conectar Google, con el backend activo abre:
 
 ```text
 http://localhost:3000/auth/google
 ```
 
-Authorize the Google account.
+## Contratos HTTP principales
 
-The current MVP stores the Google OAuth token in memory, so authorization may be required again after restarting the backend.
+- `POST /meeting/start`
+- `POST /events/transcript.segment.final` (`/analyze` permanece como alias)
+- `POST /meeting/end`
+- `POST /memory/retrieve`
+- `POST /signals/:id/feedback`
+- `POST /actions/calendar/propose`
+- `POST /actions/:id/confirm`
 
----
+Con autenticación Supabase activa, el `sub` verificado del JWT se usa como
+usuario. Un `x-user-id` enviado por el cliente no puede sustituirlo.
 
-## Install the Chrome extension
+Ejemplo de segmento final:
 
-Open Chrome:
-
-```text
-chrome://extensions
+```json
+{
+  "meetingId": "uuid",
+  "sequence": 14,
+  "segmentId": "uuid",
+  "speaker": "Ana",
+  "text": "La entrega cambia del viernes al lunes.",
+  "endedAt": "2026-09-12T16:30:00-06:00",
+  "source": "meet_caption"
+}
 ```
 
-Enable:
+## Verificación
 
-```text
-Developer mode
+```bash
+npm run typecheck
+npm test
+node --check extension/content.js
 ```
 
-Click:
+Las pruebas cubren los nueve escenarios de aceptación: compromiso con fuente,
+documentos con permisos, hitos distintos, sustitución temporal, recuperación
+vigente con historial, reintentos, ACL, confirmación de Calendar y baja
+confianza.
 
-```text
-Load unpacked
+Para observar el servicio durante una prueba real:
+
+```bash
+docker compose logs -f app
+docker compose down          # conserva PostgreSQL
+docker compose down -v       # borra PostgreSQL local
 ```
 
-and select:
+## Archivos principales
 
 ```text
-meet-agent/extension
+migrations/001_contextual_memory.sql
+src/contracts.ts
+src/live-copilot.ts
+src/memory-curator.ts
+src/action-executor.ts
+src/services/retrieval.ts
+src/memory/postgres-store.ts
+src/tool-contracts.ts
+src/prompts/*.v1.ts
+tests/memory.acceptance.test.ts
+demo/seed.sql
+src/demo.ts
 ```
-
----
-
-## Using Meet Agent
-
-1. Start the backend.
-2. Connect Google Calendar.
-3. Open a Google Meet.
-4. Enable Google Meet captions.
-5. Click the floating ✦ Meet Agent icon.
-6. Click **Start Agent**.
-7. Continue the meeting normally.
-
-While listening, Meet Agent stays minimized as a small draggable circle.
-
-When relevant context appears, it automatically displays a contextual recommendation.
-
----
-
-## Example flow
-
-```text
-Rodrigo:
-"We need to schedule a meeting tomorrow at 2 PM."
-
-             ↓
-
-Meet Agent
-
-📌 Action item
-Schedule meeting
-
-[ Add to Calendar ]
-
-             ↓
-
-Google Calendar
-Meeting — 2:00 PM
-```
-
-Then:
-
-```text
-Rodrigo:
-"Actually, let's move it to 3 PM."
-
-             ↓
-
-Meet Agent
-
-🕒 Change suggested
-
-Previous:
-Meeting at 2 PM
-
-[ Update Calendar ]
-
-             ↓
-
-Google Calendar
-Meeting — 3:00 PM
-```
-
----
-
-## MVP limitations
-
-This is currently a hackathon MVP.
-
-- Google Meet caption selectors depend on the current Meet DOM and may change.
-- Google OAuth tokens are currently stored only in backend memory.
-- Calendar tracking currently focuses on the active event rather than maintaining a database of many simultaneous events.
-- The backend currently runs locally.
-- Google Meet captions must be enabled.
-
----
-
-## Hackathon
-
-Built for:
-
-**AI Tinkerers — Agents, Everywhere: Bots, Channels, & More Global Hackathon**
-
-The project explores an agent that does not live in a traditional chatbot.
-
-Instead, it lives inside an environment people already use for work:
-
-**Google Meet.**

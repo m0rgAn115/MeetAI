@@ -1,0 +1,1 @@
+Siempre crea commits atomicos de todo lo que vayamos trabajando, sigiendo la estructura de gitflow con mensaje corto en español. Nunca te pongas de co-author.

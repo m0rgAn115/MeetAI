@@ -9,6 +9,10 @@ let meetingActive = false;
 let panelOpen = false;
 let lastAgentEvent = null;
 let activeCalendarEventId = null;
+let currentMeetingId = null;
+let currentWorkspaceId = null;
+let currentUserId = null;
+let nextSegmentSequence = 1;
 
 const captionTimers = new Map();
 const lastSentCaptions = new Map();
@@ -407,6 +411,15 @@ function setupPanelListeners() {
           "http://localhost:3000/meeting/start",
           {
             method: "POST",
+
+            headers: {
+              "Content-Type": "application/json",
+            },
+
+            body: JSON.stringify({
+              title: document.title || "Google Meet",
+              meetUrl: window.location.href,
+            }),
           }
         );
 
@@ -418,6 +431,13 @@ function setupPanelListeners() {
           );
         }
 
+
+        const session = await response.json();
+
+        currentMeetingId = session.meetingId;
+        currentWorkspaceId = session.workspaceId;
+        currentUserId = session.userId;
+        nextSegmentSequence = 1;
 
         clearCaptionMemory();
 
@@ -469,6 +489,16 @@ function setupPanelListeners() {
           "http://localhost:3000/meeting/end",
           {
             method: "POST",
+
+            headers: {
+              "Content-Type": "application/json",
+            },
+
+            body: JSON.stringify({
+              meetingId: currentMeetingId,
+              workspaceId: currentWorkspaceId,
+              userId: currentUserId,
+            }),
           }
         );
 
@@ -481,12 +511,21 @@ function setupPanelListeners() {
         }
 
 
+        const endedMeeting = await response.json();
+
         clearCaptionMemory();
 
         activeCalendarEventId = null;
         hideRecommendation(true);
 
         updateMeetingUI(false);
+
+        if (endedMeeting.closing) {
+          renderMeetingClosing(endedMeeting.closing);
+        }
+
+        currentMeetingId = null;
+        nextSegmentSequence = 1;
 
 
         console.log(
@@ -777,6 +816,12 @@ async function sendTranscriptToBackend(
       },
 
       body: JSON.stringify({
+        meetingId: currentMeetingId,
+        workspaceId: currentWorkspaceId,
+        userId: currentUserId,
+        sequence: nextSegmentSequence++,
+        segmentId: crypto.randomUUID(),
+        source: "meet_caption",
         speaker,
         text,
         currentDateTime,
@@ -818,8 +863,36 @@ async function createCalendarEventFromAgent(
   }
 
 
+  let proposedActionId = event.proposedActionId;
+
+  if (!proposedActionId) {
+    const proposalResponse = await fetch(
+      "http://localhost:3000/actions/calendar/propose",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          meetingId: currentMeetingId,
+          workspaceId: currentWorkspaceId,
+          userId: currentUserId,
+          correlationId: event.correlationId,
+          action: {
+            title: event.calendarTitle,
+            startDateTime: event.calendarStart,
+            endDateTime: event.calendarEnd,
+            description: event.summary ?? "Created by Meet Agent",
+            attendeeEmails: event.attendeeEmails ?? [],
+            eventId: null,
+          },
+        }),
+      }
+    );
+    if (!proposalResponse.ok) throw new Error(`Backend returned ${proposalResponse.status}`);
+    proposedActionId = (await proposalResponse.json()).action.id;
+  }
+
   const response = await fetch(
-    "http://localhost:3000/calendar/create",
+    `http://localhost:3000/actions/${encodeURIComponent(proposedActionId)}/confirm`,
     {
       method: "POST",
 
@@ -828,22 +901,8 @@ async function createCalendarEventFromAgent(
       },
 
       body: JSON.stringify({
-        title:
-          event.calendarTitle,
-
-        startDateTime:
-          event.calendarStart,
-
-        endDateTime:
-          event.calendarEnd,
-
-        description:
-          event.summary ??
-          "Created by Meet Agent",
-
-        attendees:
-          event.attendeeEmails ??
-          [],
+        workspaceId: currentWorkspaceId,
+        userId: currentUserId,
       }),
     }
   );
@@ -893,37 +952,35 @@ async function updateCalendarEventFromAgent(
   }
 
 
-  const response = await fetch(
-    "http://localhost:3000/calendar/update",
+  const proposalResponse = await fetch(
+    "http://localhost:3000/actions/calendar/propose",
     {
-      method: "PATCH",
-
-      headers: {
-        "Content-Type": "application/json",
-      },
-
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        eventId:
-          activeCalendarEventId,
-
-        title:
-          event.calendarTitle ??
-          "Meeting",
-
-        startDateTime:
-          event.calendarStart,
-
-        endDateTime:
-          event.calendarEnd,
-
-        description:
-          event.summary ??
-          "Updated by Meet Agent",
-
-        attendees:
-          event.attendeeEmails ??
-          [],
+        meetingId: currentMeetingId,
+        workspaceId: currentWorkspaceId,
+        userId: currentUserId,
+        correlationId: event.correlationId,
+        action: {
+          eventId: activeCalendarEventId,
+          title: event.calendarTitle ?? "Meeting",
+          startDateTime: event.calendarStart,
+          endDateTime: event.calendarEnd,
+          description: event.summary ?? "Updated by Meet Agent",
+          attendeeEmails: event.attendeeEmails ?? [],
+        },
       }),
+    }
+  );
+  if (!proposalResponse.ok) throw new Error(`Backend returned ${proposalResponse.status}`);
+  const proposedActionId = (await proposalResponse.json()).action.id;
+  const response = await fetch(
+    `http://localhost:3000/actions/${encodeURIComponent(proposedActionId)}/confirm`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId: currentWorkspaceId, userId: currentUserId }),
     }
   );
 
@@ -1017,7 +1074,9 @@ function setupCalendarButton(
 
 
         activeCalendarEventId =
-          result.event.id;
+          result.action?.result?.id ??
+          result.action?.result?.eventId ??
+          activeCalendarEventId;
 
 
         button.textContent =
@@ -1173,7 +1232,7 @@ function hideRecommendation(
 }
 
 
-function setupDismissButton() {
+function setupDismissButton(event = lastAgentEvent) {
 
   const button =
     document.getElementById(
@@ -1188,9 +1247,13 @@ function setupDismissButton() {
 
   button.addEventListener(
     "click",
-    (event) => {
+    async (clickEvent) => {
 
-      event.stopPropagation();
+      clickEvent.stopPropagation();
+
+      if (event?.signalId) {
+        await recordSignalFeedback(event.signalId, "dismissed");
+      }
 
 
       hideRecommendation(true);
@@ -1201,6 +1264,103 @@ function setupDismissButton() {
       );
     }
   );
+}
+
+async function recordSignalFeedback(signalId, reaction, note = null) {
+  if (!signalId) return;
+  try {
+    await fetch(
+      `http://localhost:3000/signals/${encodeURIComponent(signalId)}/feedback`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
+          userId: currentUserId,
+          reaction,
+          note,
+          idempotencyKey: `${signalId}:${reaction}`,
+        }),
+      }
+    );
+  } catch (error) {
+    console.warn("Could not record signal feedback", error);
+  }
+}
+
+function setupCardControls(event) {
+  setupDismissButton(event);
+  const card = document.querySelector("#meet-agent-recommendation .meet-agent-card");
+  if (!card || !event?.signalId || card.querySelector(".meet-agent-feedback")) return;
+  const controls = document.createElement("div");
+  controls.className = "meet-agent-feedback";
+  controls.innerHTML = `
+    <button type="button" data-reaction="accepted">Aceptar</button>
+    <button type="button" data-reaction="edited">Editar</button>
+    <button type="button" data-reaction="postponed">Posponer</button>
+  `;
+  card.appendChild(controls);
+  controls.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const reaction = button.dataset.reaction;
+      let note = null;
+      if (reaction === "edited") note = window.prompt("¿Qué cambiarías en esta sugerencia?") ?? null;
+      await recordSignalFeedback(event.signalId, reaction, note);
+      hideRecommendation(true);
+    });
+  });
+}
+
+function renderStructuredIntervention(container, event) {
+  const intervention = event.intervention;
+  const evidence = Array.isArray(event.evidence) ? event.evidence : [];
+  const historical = evidence.filter((item) =>
+    intervention.historicalEvidenceIds?.includes(item.source?.id)
+  );
+  container.innerHTML = `
+    <div class="meet-agent-card">
+      <button id="meet-agent-dismiss" class="meet-agent-dismiss" type="button" aria-label="Descartar">×</button>
+      <div class="meet-agent-card-title">${escapeHtml(intervention.title ?? "Contexto relevante")}</div>
+      <div>${escapeHtml(intervention.message ?? "")}</div>
+      ${intervention.currentEvidence ? `
+        <div class="meet-agent-evidence">
+          <span>Frase actual</span>
+          “${escapeHtml(intervention.currentEvidence)}”
+        </div>` : ""}
+      ${historical.map((item) => `
+        <div class="meet-agent-evidence historical">
+          <span>Evidencia anterior · ${escapeHtml(formatDriveDate(item.observedAt))}</span>
+          “${escapeHtml(item.quotedText)}”
+          ${item.source?.documentUri ? `<a href="${escapeHtml(item.source.documentUri)}" target="_blank" rel="noopener noreferrer">Abrir fuente</a>` : ""}
+          <small>Confianza ${Math.round((item.memory?.confidence ?? 0) * 100)}%</small>
+        </div>`).join("")}
+      ${event.proposedActionId ? `
+        <button id="meet-agent-add-calendar" class="meet-agent-action-button">Confirmar en Calendar</button>
+        <div class="meet-agent-human-confirmation">Solo se ejecutará después de este clic.</div>` : ""}
+    </div>
+  `;
+  setupCardControls(event);
+  if (event.proposedActionId) setupCalendarButton(event);
+}
+
+function renderMeetingClosing(closing) {
+  const container = document.getElementById("meet-agent-recommendation");
+  if (!container) return;
+  const section = (title, values) => Array.isArray(values) && values.length
+    ? `<div class="meet-agent-closing-section"><strong>${escapeHtml(title)}</strong>${values.map((value) => `<div>• ${escapeHtml(value)}</div>`).join("")}</div>`
+    : "";
+  container.innerHTML = `
+    <div class="meet-agent-card">
+      <button id="meet-agent-dismiss" class="meet-agent-dismiss" type="button" aria-label="Cerrar">×</button>
+      <div class="meet-agent-card-title">${escapeHtml(closing.title)}</div>
+      ${section("Decisiones", closing.decisions)}
+      ${section("Compromisos y responsables", closing.commitments)}
+      ${section("Asuntos abiertos", closing.openQuestions)}
+      ${section("Documentos", closing.documents)}
+      ${section("Acciones pendientes", closing.pendingActions)}
+    </div>`;
+  container.classList.remove("hidden");
+  setupDismissButton();
 }
 
 // ============================================================
@@ -1247,6 +1407,11 @@ function renderAgentEvent(
   container.classList.remove(
     "hidden"
   );
+
+  if (event.intervention) {
+    renderStructuredIntervention(container, event);
+    return;
+  }
 
   // ----------------------------------------------------------
   // DRIVE FILE SEARCH

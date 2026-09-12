@@ -375,6 +375,63 @@
   cursor: default;
 }
 
+.meet-agent-evidence {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.meet-agent-evidence.historical {
+  border-left: 3px solid rgba(129, 140, 248, 0.8);
+}
+
+.meet-agent-evidence span,
+.meet-agent-evidence small {
+  display: block;
+  margin-bottom: 4px;
+  opacity: 0.62;
+  font-size: 10px;
+}
+
+.meet-agent-evidence a {
+  display: inline-block;
+  margin-top: 6px;
+  color: #a5b4fc;
+}
+
+.meet-agent-human-confirmation {
+  margin-top: 5px;
+  text-align: center;
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.meet-agent-feedback {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.meet-agent-feedback button {
+  flex: 1;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.meet-agent-closing-section {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 /* ============================================================
    GOOGLE DRIVE RESULTS
    ============================================================ */

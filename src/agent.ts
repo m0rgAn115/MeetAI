@@ -231,13 +231,13 @@ If no attendee emails were shared, return null.
 
 
 // ============================================================
-// TEMPORARY MEETING MEMORY
+// LEGACY CLI COMPATIBILITY WINDOW
 // ============================================================
 
-const meetingTranscript: string[] = [];
+const recentTranscript: string[] = [];
 
 export function resetMeetingMemory() {
-  meetingTranscript.length = 0;
+  recentTranscript.length = 0;
 
   console.log("Meeting memory cleared");
 }
@@ -255,10 +255,16 @@ export async function processTranscript(
 
   const newMessage = `${speaker}: ${text}`;
 
-  meetingTranscript.push(newMessage);
+  recentTranscript.push(newMessage);
+
+  // The production path uses LiveCopilot and persisted meeting state. Keep
+  // this old CLI adapter bounded so it never resends an unbounded transcript.
+  if (recentTranscript.length > 8) {
+    recentTranscript.splice(0, recentTranscript.length - 8);
+  }
 
   const transcript =
-    meetingTranscript.join("\n");
+    recentTranscript.join("\n");
 
 
   const prompt = `

@@ -27,22 +27,18 @@ const redirectUri =
   process.env.GOOGLE_REDIRECT_URI;
 
 
-if (
-  !clientId ||
-  !clientSecret ||
-  !redirectUri
-) {
-  throw new Error(
-    "Missing Google OAuth variables in .env"
-  );
+function requireGoogleOAuthConfig() {
+  if (!clientId || !clientSecret || !redirectUri) {
+    throw new Error("Missing Google OAuth variables in .env");
+  }
 }
 
 
 export const googleOAuthClient =
   new google.auth.OAuth2(
-    clientId,
-    clientSecret,
-    redirectUri
+    clientId ?? "",
+    clientSecret ?? "",
+    redirectUri ?? ""
   );
 
 
@@ -61,6 +57,8 @@ let googleTokens: any = null;
 // ============================================================
 
 export function getGoogleAuthUrl() {
+
+  requireGoogleOAuthConfig();
 
   return googleOAuthClient.generateAuthUrl({
     access_type: "offline",
@@ -82,6 +80,8 @@ export function getGoogleAuthUrl() {
 export async function saveGoogleAuthCode(
   code: string
 ) {
+
+  requireGoogleOAuthConfig();
 
   const {
     tokens,
