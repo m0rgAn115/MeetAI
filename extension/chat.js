@@ -251,7 +251,7 @@ async function submitChatMessage(text) {
       { role: "assistant", content: reply ?? "" }
     );
 
-    pending.innerHTML = `<div class="meet-agent-chat-bubble">${escapeHtml(reply ?? "")}</div>`
+    pending.innerHTML = `<div class="meet-agent-chat-bubble">${formatChatReply(reply ?? "")}</div>`
       + (Array.isArray(attachments) ? attachments : []).map(renderChatAttachment).join("");
 
   } catch (error) {
@@ -282,6 +282,16 @@ async function submitChatMessage(text) {
 
 function escapeAttribute(value) {
   return escapeHtml(value).replace(/"/g, "&quot;");
+}
+
+
+// Escapes first, then renders the little Markdown models still emit
+// (**bold**, *italic*, `code`) so it doesn't show up literally.
+function formatChatReply(text) {
+  return escapeHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*(\S(?:[^*\n]*\S)?)\*(?!\*)/g, "$1<em>$2</em>")
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>");
 }
 
 

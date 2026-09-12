@@ -815,6 +815,13 @@
   overflow-wrap: anywhere;
 }
 
+.meet-agent-chat-bubble code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 12px;
+}
+
 .meet-agent-chat-msg--user .meet-agent-chat-bubble {
   align-self: flex-end;
 
