@@ -21,6 +21,10 @@ import {
 } from "./gmail";
 
 import {
+  sendSlackMessage,
+} from "./slack";
+
+import {
   processTranscript,
   resetMeetingMemory,
 } from "./agent";
@@ -807,6 +811,67 @@ app.post(
       return res.status(500).json({
         error:
           "Failed to send Gmail message",
+      });
+    }
+  }
+);
+
+// ============================================================
+// SLACK NOTIFY
+// ============================================================
+//
+// This only fires when the user explicitly clicks "Notify
+// Slack" in the extension — never automatically.
+
+app.post(
+  "/slack/notify",
+  async (req, res) => {
+
+    try {
+
+      const {
+        text,
+      } = req.body;
+
+
+      if (
+        !text ||
+        typeof text !== "string"
+      ) {
+
+        return res.status(400).json({
+          error:
+            "text is required",
+        });
+      }
+
+
+      await sendSlackMessage(
+        text
+      );
+
+
+      console.log(
+        "💬 Slack notification sent"
+      );
+
+
+      return res.json({
+        success: true,
+      });
+
+
+    } catch (error) {
+
+      console.error(
+        "Slack notify error:",
+        error
+      );
+
+
+      return res.status(500).json({
+        error:
+          "Failed to send Slack notification",
       });
     }
   }
