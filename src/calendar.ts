@@ -139,7 +139,7 @@ export function getGoogleAuthUrl() {
     access_type: "offline",
 
     prompt: "consent",
-
+    
     scope: [
       "https://www.googleapis.com/auth/calendar.events",
       "https://www.googleapis.com/auth/drive.metadata.readonly",

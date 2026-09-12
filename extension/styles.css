@@ -1,5 +1,45 @@
 /* ============================================================
-   FLOATING ROOT
+   MEET AGENT — DESIGN TOKENS (Liquid Glass)
+   ============================================================
+   Concept: the agent stays quiet and only resolves into a clear
+   signal when something real happens. Surfaces are translucent,
+   blurred panes of glass sitting on top of the call — never a
+   flat opaque box. Each event type tints its own pane with a
+   soft accent glow instead of a hard colored border.
+   ============================================================ */
+
+#meet-agent-root {
+  --ma-glass: rgba(24, 26, 32, 0.32);
+  --ma-glass-strong: rgba(24, 26, 32, 0.42);
+  --ma-glass-control: rgba(255, 255, 255, 0.09);
+  --ma-glass-border: rgba(255, 255, 255, 0.26);
+  --ma-glass-sheen: rgba(255, 255, 255, 0.38);
+  --ma-blur: 34px;
+
+  --ma-text: #f5f6f8;
+  --ma-text-dim: rgba(245, 246, 248, 0.7);
+  --ma-text-faint: rgba(245, 246, 248, 0.46);
+
+  --ma-listening: #34d399;
+  --ma-commitment: #f4c065;
+  --ma-action: #9caaff;
+  --ma-change: #5be0d3;
+  --ma-contradiction: #ff8478;
+  --ma-context: #9caaff;
+
+  --ma-radius-card: 24px;
+  --ma-radius-control: 12px;
+  --ma-radius-pill: 999px;
+  --ma-shadow: 0 24px 60px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
+
+  --ma-font:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+}
+
+
+/* ============================================================
+   ROOT / POSITIONING
    ============================================================ */
 
 #meet-agent-root {
@@ -8,88 +48,162 @@
   top: 80px;
   right: 24px;
 
-  width: 58px;
-  height: 58px;
+  width: 44px;
+  height: 44px;
 
   z-index: 999999;
 
-  font-family:
-    Arial,
-    sans-serif;
+  font-family: var(--ma-font);
+  color: var(--ma-text);
+
+  -webkit-font-smoothing: antialiased;
 }
 
 
 /* ============================================================
-   AGENT BUBBLE
+   AGENT BUBBLE — a glass droplet
    ============================================================ */
 
 #meet-agent-bubble {
   position: relative;
 
-  width: 58px;
-  height: 58px;
+  width: 44px;
+  height: 44px;
 
   border-radius: 50%;
 
   display: flex;
-
   align-items: center;
   justify-content: center;
 
   background:
-    rgba(28, 28, 32, 0.98);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.02) 45%),
+    var(--ma-glass);
 
-  border:
-    1px solid
-    rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+
+  border: 1px solid var(--ma-glass-border);
 
   box-shadow:
-    0 10px 30px
-    rgba(0, 0, 0, 0.35);
-
-  color: white;
+    var(--ma-shadow),
+    inset 0 1px 0 var(--ma-glass-sheen),
+    inset 0 -6px 10px rgba(0, 0, 0, 0.2);
 
   cursor: grab;
-
   user-select: none;
-
   touch-action: none;
 }
-
 
 #meet-agent-bubble:active {
   cursor: grabbing;
 }
 
+/* pulse ring — only present while actively listening */
+#meet-agent-bubble::before {
+  content: "";
+
+  position: absolute;
+  inset: -6px;
+
+  border-radius: 50%;
+  border: 1px solid var(--ma-listening);
+
+  opacity: 0;
+  transform: scale(0.9);
+
+  pointer-events: none;
+}
+
+#meet-agent-bubble.is-listening::before {
+  animation: ma-pulse 2.4s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #meet-agent-bubble.is-listening::before {
+    animation: none;
+    opacity: 0.35;
+    transform: scale(1);
+  }
+}
+
+@keyframes ma-pulse {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.9);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
 
 .meet-agent-bubble-logo {
-  font-size: 26px;
+  font-size: 18px;
   line-height: 1;
+  color: var(--ma-text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 
 .meet-agent-bubble-status {
   position: absolute;
 
-  right: 3px;
-  bottom: 4px;
+  right: 1px;
+  bottom: 2px;
 
-  width: 11px;
-  height: 11px;
+  width: 9px;
+  height: 9px;
 
   border-radius: 50%;
-
-  border: 2px solid #1c1c20;
+  border: 2px solid rgba(24, 26, 32, 0.75);
 }
-
 
 .meet-agent-bubble-status.active {
-  background: #4ade80;
+  background: var(--ma-listening);
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.7);
+}
+
+.meet-agent-bubble-status.inactive {
+  background: var(--ma-text-faint);
 }
 
 
-.meet-agent-bubble-status.inactive {
-  background: #9ca3af;
+/* ============================================================
+   ADAPTIVE POSITIONING
+   ============================================================
+   The bubble's quadrant decides which way the panel and the
+   recommendation card open, so they never spill off-screen.
+   Classes are set in JS (repositionFloatingUI) on drag end.
+   ============================================================ */
+
+#meet-agent-root.ma-open-down .meet-agent-window,
+#meet-agent-root.ma-open-down .meet-agent-recommendation {
+  top: 54px;
+  bottom: auto;
+}
+
+#meet-agent-root.ma-open-up .meet-agent-window,
+#meet-agent-root.ma-open-up .meet-agent-recommendation {
+  bottom: 54px;
+  top: auto;
+}
+
+#meet-agent-root.ma-open-left .meet-agent-window,
+#meet-agent-root.ma-open-left .meet-agent-recommendation {
+  right: 0;
+  left: auto;
+}
+
+#meet-agent-root.ma-open-right .meet-agent-window,
+#meet-agent-root.ma-open-right .meet-agent-recommendation {
+  left: 0;
+  right: auto;
 }
 
 
@@ -100,96 +214,97 @@
 .meet-agent-window {
   position: absolute;
 
-  top: 68px;
-  right: 0;
+  width: 300px;
 
-  width: 350px;
-
-  padding: 16px;
-
+  padding: 18px;
   box-sizing: border-box;
 
   background:
-    rgba(28, 28, 32, 0.98);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.01) 40%),
+    var(--ma-glass-strong);
 
-  border:
-    1px solid
-    rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(var(--ma-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--ma-blur)) saturate(160%);
 
-  border-radius: 18px;
+  border: 1px solid var(--ma-glass-border);
+  border-radius: var(--ma-radius-card);
 
-  box-shadow:
-    0 16px 50px
-    rgba(0, 0, 0, 0.4);
+  box-shadow: var(--ma-shadow), inset 0 1px 0 var(--ma-glass-sheen);
 
-  color: white;
+  color: var(--ma-text);
 }
 
 
 /* ============================================================
-   RECOMMENDATION CARD
+   RECOMMENDATION CARD — the "resolved signal"
+   ============================================================
+   Each event type tints the pane with a soft glow from the
+   top-left, using --accent set by a modifier class, rather than
+   a flat colored sidebar.
    ============================================================ */
 
 .meet-agent-recommendation {
   position: absolute;
 
-  top: 68px;
-  right: 0;
-
-  width: 320px;
-
+  width: 300px;
   box-sizing: border-box;
 
-  color: white;
+  color: var(--ma-text);
 }
-
 
 .meet-agent-card {
+  --accent: var(--ma-listening);
+
   position: relative;
+  overflow: hidden;
 
-  padding: 16px;
+  padding: 18px 18px 16px 18px;
 
-  border-radius: 16px;
+  border-radius: var(--ma-radius-card);
 
   background:
-    rgba(28, 28, 32, 0.98);
+    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--accent) 22%, transparent) 0%, transparent 55%),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.01) 45%),
+    var(--ma-glass-strong);
 
-  border:
-    1px solid
-    rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(var(--ma-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--ma-blur)) saturate(160%);
 
-  box-shadow:
-    0 16px 50px
-    rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--ma-glass-border);
+
+  box-shadow: var(--ma-shadow), inset 0 1px 0 var(--ma-glass-sheen);
 }
+
+.meet-agent-card--commitment { --accent: var(--ma-commitment); }
+.meet-agent-card--action     { --accent: var(--ma-action); }
+.meet-agent-card--change     { --accent: var(--ma-change); }
+.meet-agent-card--contradiction { --accent: var(--ma-contradiction); }
+.meet-agent-card--drive      { --accent: var(--ma-context); }
 
 
 .meet-agent-dismiss {
   position: absolute;
 
-  top: 8px;
-  right: 10px;
+  top: 12px;
+  right: 14px;
 
-  width: 26px;
-  height: 26px;
-
+  width: 24px;
+  height: 24px;
   padding: 0;
 
   border: none;
-
   background: transparent;
 
-  color:
-    rgba(255, 255, 255, 0.6);
-
-  font-size: 20px;
+  color: var(--ma-text-faint);
+  font-size: 18px;
+  line-height: 1;
 
   cursor: pointer;
+  transition: color 0.15s ease;
 }
 
-
 .meet-agent-dismiss:hover {
-  color: white;
+  color: var(--ma-text);
 }
 
 
@@ -201,178 +316,226 @@
   display: none !important;
 }
 
-.meet-agent-header {
-  font-size: 16px;
-  font-weight: 700;
+.meet-agent-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
+.meet-agent-header {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+
+/* ============================================================
+   iOS-STYLE TOGGLE SWITCH
+   ============================================================ */
+
+.meet-agent-toggle {
+  position: relative;
+  flex-shrink: 0;
+
+  width: 46px;
+  height: 27px;
+
+  padding: 2px;
+  box-sizing: border-box;
+
+  border: none;
+  border-radius: var(--ma-radius-pill);
+
+  background: rgba(120, 120, 128, 0.42);
+
+  cursor: pointer;
+
+  transition: background 0.25s ease;
+}
+
+.meet-agent-toggle[aria-checked="true"] {
+  background: var(--ma-listening);
+}
+
+.meet-agent-toggle:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.meet-agent-toggle-thumb {
+  display: block;
+
+  width: 23px;
+  height: 23px;
+
+  border-radius: 50%;
+
+  background: #ffffff;
+
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.35),
+    0 1px 1px rgba(0, 0, 0, 0.2);
+
+  transform: translateX(0);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.meet-agent-toggle[aria-checked="true"] .meet-agent-toggle-thumb {
+  transform: translateX(19px);
+}
 
 .meet-agent-status {
   display: flex;
   align-items: center;
-
-  gap: 7px;
+  gap: 8px;
 
   font-size: 13px;
+  color: var(--ma-text-dim);
 
-  margin-bottom: 14px;
-
-  opacity: 0.85;
+  margin-bottom: 16px;
 }
-
 
 .meet-agent-status-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 
+.meet-agent-status-dot.active {
+  background: var(--ma-listening);
+  box-shadow: 0 0 0 3px rgba(111, 240, 218, 0.18);
+}
+
+.meet-agent-status-dot.inactive {
+  background: var(--ma-text-faint);
+}
+
+
+.meet-agent-speaker-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  margin-top: -8px;
+  margin-bottom: 16px;
+
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ma-text-dim);
+}
+
+.meet-agent-speaker-row::before {
+  content: "";
+
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
 
-  display: inline-block;
+  background: var(--ma-action);
 }
 
-.meet-agent-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.meet-agent-form input,
-.meet-agent-form textarea {
-  width: 100%;
-  box-sizing: border-box;
-
-  padding: 9px;
-
-  border-radius: 8px;
-
-  border:
-    1px solid rgba(255, 255, 255, 0.12);
-
-  background:
-    rgba(255, 255, 255, 0.06);
-
-  color: white;
-
-  font-size: 13px;
-}
-
-.meet-agent-form textarea {
-  min-height: 70px;
-  resize: vertical;
-}
-
-.meet-agent-form button {
-  border: none;
-
-  border-radius: 8px;
-
-  padding: 9px 12px;
-
-  cursor: pointer;
-
-  font-weight: 600;
-}
 
 #meet-agent-result {
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.5;
+  color: var(--ma-text-dim);
 }
 
 
 .meet-agent-card-title {
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 
-  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+
+  margin-bottom: 10px;
+
+  color: var(--ma-text);
 }
+
+.meet-agent-card-title svg {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  color: var(--accent, var(--ma-text));
+}
+
 
 .meet-agent-secondary {
   margin-top: 8px;
 
-  opacity: 0.7;
-
+  color: var(--ma-text-faint);
   font-size: 12px;
 }
 
 .meet-agent-conflict {
-  margin-top: 8px;
+  margin-top: 10px;
 
-  padding: 8px 10px;
+  padding: 9px 11px;
 
-  border-radius: 8px;
+  border-radius: 12px;
 
-  background:
-    rgba(250, 204, 21, 0.12);
+  background: rgba(255, 132, 120, 0.12);
+  border: 1px solid rgba(255, 132, 120, 0.3);
 
-  border:
-    1px solid
-    rgba(250, 204, 21, 0.35);
+  color: #ffc2b8;
 
-  color: #facc15;
-
-  font-size: 12px;
-
-  line-height: 1.4;
+  font-size: 12.5px;
+  line-height: 1.45;
 }
 
 .meet-agent-loading,
 .meet-agent-silent,
 .meet-agent-error {
-  opacity: 0.8;
+  color: var(--ma-text-dim);
 }
 
-.meet-agent-controls {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.meet-agent-controls button {
-  flex: 1;
-
-  padding: 8px 10px;
-
-  border: none;
-  border-radius: 8px;
-
-  cursor: pointer;
-
-  font-weight: 600;
-}
-
-.meet-agent-controls button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.meet-agent-status-dot.active {
-  background: #4ade80;
-}
-
-.meet-agent-status-dot.inactive {
-  background: #9ca3af;
+.meet-agent-error {
+  color: var(--ma-contradiction);
 }
 
 .meet-agent-action-button {
   width: 100%;
-
   margin-top: 12px;
 
-  padding: 9px 12px;
+  padding: 10px 14px;
 
-  border: none;
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--ma-radius-pill);
+
+  background: rgba(255, 255, 255, 0.92);
+  color: #14161c;
+
+  font-family: var(--ma-font);
+  font-size: 13px;
+  font-weight: 600;
 
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
 
-  font-weight: 600;
+.meet-agent-action-button:hover:not(:disabled) {
+  background: #ffffff;
 }
 
 .meet-agent-action-button:disabled {
-  opacity: 0.65;
+  opacity: 0.45;
   cursor: default;
+}
+
+/* confirmed / scheduled state — stays green, no longer greyed out */
+.meet-agent-action-button--success,
+.meet-agent-action-button--success:disabled {
+  background: rgba(52, 211, 153, 0.92);
+  color: #0b1f16;
+  opacity: 1;
 }
 
 .meet-agent-evidence {
@@ -433,150 +596,124 @@
 }
 
 /* ============================================================
-   GOOGLE DRIVE RESULTS
+   GOOGLE DRIVE / CONTEXT RESULTS
    ============================================================ */
 
 .meet-agent-drive-summary {
   margin-bottom: 10px;
 
   font-size: 12px;
-
-  opacity: 0.65;
+  color: var(--ma-text-faint);
 }
-
 
 .meet-agent-drive-results {
   display: flex;
-
   flex-direction: column;
-
   gap: 6px;
 
-  max-height: 340px;
-
+  max-height: 320px;
   overflow-y: auto;
-
   padding-right: 5px;
 
   overscroll-behavior: contain;
 }
 
-
 .meet-agent-drive-result {
   display: flex;
-
   align-items: center;
-
   justify-content: space-between;
-
   gap: 10px;
 
   padding: 9px 10px;
 
-  border-radius: 10px;
+  border-radius: 12px;
 
-  background:
-    rgba(
-      255,
-      255,
-      255,
-      0.055
-    );
-
-  border:
-    1px solid
-    rgba(
-      255,
-      255,
-      255,
-      0.07
-    );
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
-
 
 .meet-agent-drive-file-info {
   flex: 1;
-
   min-width: 0;
 }
 
-
 .meet-agent-drive-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
   font-size: 13px;
-
   font-weight: 600;
-
   line-height: 1.3;
 
   overflow: hidden;
-
   text-overflow: ellipsis;
-
   white-space: nowrap;
 }
 
+.meet-agent-drive-name svg {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  color: var(--ma-context);
+}
 
 .meet-agent-drive-meta {
   margin-top: 3px;
 
-  font-size: 10px;
-
-  opacity: 0.55;
+  font-size: 10.5px;
+  color: var(--ma-text-faint);
 
   overflow: hidden;
-
   text-overflow: ellipsis;
-
   white-space: nowrap;
 }
-
 
 .meet-agent-drive-open {
   flex-shrink: 0;
 
   padding: 6px 10px;
 
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
 
-  border-radius: 7px;
+  background: transparent;
+  color: var(--ma-text);
+
+  font-family: var(--ma-font);
+  font-size: 11px;
+  font-weight: 600;
 
   cursor: pointer;
-
-  font-size: 11px;
-
-  font-weight: 600;
+  transition: background 0.15s ease;
 }
 
+.meet-agent-drive-open:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.meet-agent-drive-open--opened,
+.meet-agent-drive-open--opened:hover {
+  background: rgba(52, 211, 153, 0.9);
+  border-color: rgba(52, 211, 153, 0.9);
+  color: #0b1f16;
+}
 
 .meet-agent-drive-empty {
   font-size: 13px;
-
-  line-height: 1.4;
-
-  opacity: 0.8;
+  line-height: 1.45;
+  color: var(--ma-text-dim);
 }
-
-
-/* scrollbar */
 
 .meet-agent-drive-results::-webkit-scrollbar {
   width: 6px;
 }
 
-
 .meet-agent-drive-results::-webkit-scrollbar-track {
   background: transparent;
 }
 
-
 .meet-agent-drive-results::-webkit-scrollbar-thumb {
-  background:
-    rgba(
-      255,
-      255,
-      255,
-      0.18
-    );
-
+  background: var(--ma-glass-border);
   border-radius: 10px;
 }
