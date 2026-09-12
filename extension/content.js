@@ -1057,6 +1057,29 @@ function setupCalendarButton(
   );
 }
 
+function formatDriveDate(
+  isoDate
+) {
+
+  if (!isoDate) {
+    return "";
+  }
+
+
+  const date =
+    new Date(isoDate);
+
+
+  return new Intl.DateTimeFormat(
+    undefined,
+    {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }
+  ).format(date);
+}
 
 // ============================================================
 // UPDATE CALENDAR BUTTON
@@ -1180,7 +1203,6 @@ function setupDismissButton() {
   );
 }
 
-
 // ============================================================
 // RENDER AGENT EVENT
 // ============================================================
@@ -1226,6 +1248,210 @@ function renderAgentEvent(
     "hidden"
   );
 
+  // ----------------------------------------------------------
+  // DRIVE FILE SEARCH
+  // ----------------------------------------------------------
+
+  if (
+    event.type === "file_search"
+  ) {
+
+    const files =
+      Array.isArray(
+        event.driveResults
+      )
+        ? event.driveResults
+        : [];
+
+
+    container.innerHTML = `
+      <div class="meet-agent-card">
+
+        <button
+          id="meet-agent-dismiss"
+          class="meet-agent-dismiss"
+          type="button"
+          aria-label="Dismiss recommendation"
+          title="Dismiss"
+        >
+          ×
+        </button>
+
+
+        <div class="meet-agent-card-title">
+          📁 Drive search
+        </div>
+
+
+        ${
+          files.length === 0
+            ? `
+              <div class="meet-agent-drive-empty">
+
+                No matching files found for
+
+                <strong>
+                  ${escapeHtml(
+                    event.driveQuery ??
+                    ""
+                  )}
+                </strong>
+
+              </div>
+            `
+            : `
+              <div class="meet-agent-drive-summary">
+
+                Found
+                ${files.length}
+                file${files.length === 1 ? "" : "s"}
+
+              </div>
+
+
+              <div class="meet-agent-drive-results">
+
+                ${files
+                  .map(
+                    (file, index) => `
+
+                      <div
+                        class="meet-agent-drive-result"
+                      >
+
+                        <div
+                          class="meet-agent-drive-file-info"
+                        >
+
+                          <div
+                            class="meet-agent-drive-name"
+                            title="${escapeHtml(
+                              file.name ??
+                              "Untitled file"
+                            )}"
+                          >
+                            📄
+                            ${escapeHtml(
+                              file.name ??
+                              "Untitled file"
+                            )}
+                          </div>
+
+
+                          ${
+                            file.modifiedTime
+                              ? `
+                                <div
+                                  class="meet-agent-drive-meta"
+                                >
+                                  Modified
+                                  ${escapeHtml(
+                                    formatDriveDate(
+                                      file.modifiedTime
+                                    )
+                                  )}
+                                </div>
+                              `
+                              : ""
+                          }
+
+
+                          ${
+                            file.owner?.name ||
+                            file.owner?.email
+                              ? `
+                                <div
+                                  class="meet-agent-drive-meta"
+                                >
+                                  Owner:
+                                  ${escapeHtml(
+                                    file.owner?.name ??
+                                    file.owner?.email ??
+                                    "Unknown"
+                                  )}
+                                </div>
+                              `
+                              : ""
+                          }
+
+                        </div>
+
+
+                        ${
+                          file.webViewLink
+                            ? `
+                              <button
+                                class="
+                                  meet-agent-drive-open
+                                  meet-agent-open-drive
+                                "
+                                data-drive-index="${index}"
+                                title="Open in Google Drive"
+                              >
+                                Open
+                              </button>
+                            `
+                            : ""
+                        }
+
+                      </div>
+
+                    `
+                  )
+                  .join("")}
+
+              </div>
+            `
+        }
+
+      </div>
+    `;
+
+
+    setupDismissButton();
+
+
+    document
+      .querySelectorAll(
+        ".meet-agent-open-drive"
+      )
+      .forEach(
+        (button) => {
+
+          button.addEventListener(
+            "click",
+            () => {
+
+              const index =
+                Number(
+                  button.dataset
+                    .driveIndex
+                );
+
+
+              const file =
+                files[index];
+
+
+              if (
+                file &&
+                file.webViewLink
+              ) {
+
+                window.open(
+                  file.webViewLink,
+                  "_blank",
+                  "noopener,noreferrer"
+                );
+              }
+            }
+          );
+        }
+      );
+
+
+    return;
+  }
 
   // ----------------------------------------------------------
   // COMMITMENT

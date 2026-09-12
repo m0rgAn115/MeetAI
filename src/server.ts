@@ -12,6 +12,10 @@ import {
 } from "./calendar";
 
 import {
+  searchDriveFiles,
+} from "./drive";
+
+import {
   processTranscript,
   resetMeetingMemory,
 } from "./agent";
@@ -150,6 +154,41 @@ app.post("/analyze", async (req, res) => {
       >
     > = null;
 
+    let driveResults: any[] = [];
+
+
+    if (
+      event.type === "file_search" &&
+      event.driveQuery
+    ) {
+
+      try {
+
+        console.log(
+          `📁 Agent searching Drive for: ${event.driveQuery}`
+        );
+
+
+        driveResults =
+          await searchDriveFiles(
+            event.driveQuery
+          );
+
+
+        console.log(
+          `📁 Agent found ${driveResults.length} Drive file(s)`
+        );
+
+
+      } catch (error) {
+
+        console.error(
+          "Automatic Drive search failed:",
+          error
+        );
+      }
+    }
+
     if (
       isGoogleCalendarConnected() &&
       event.calendarStart &&
@@ -188,6 +227,7 @@ app.post("/analyze", async (req, res) => {
     return res.json({
       ...event,
       calendarConflict,
+      driveResults,
     });
 
 
@@ -461,6 +501,71 @@ app.patch(
           "Failed to update calendar event",
       });
 
+    }
+  }
+);
+
+// ============================================================
+// GOOGLE DRIVE SEARCH
+// ============================================================
+
+app.post(
+  "/drive/search",
+  async (req, res) => {
+
+    try {
+
+      const {
+        query,
+      } = req.body;
+
+
+      if (
+        !query ||
+        typeof query !== "string"
+      ) {
+
+        return res.status(400).json({
+          error:
+            "query is required",
+        });
+      }
+
+
+      console.log(
+        `📁 Searching Drive for: ${query}`
+      );
+
+
+      const files =
+        await searchDriveFiles(
+          query
+        );
+
+
+      console.log(
+        `📁 Drive results: ${files.length}`
+      );
+
+
+      return res.json({
+        success: true,
+        files,
+      });
+
+
+    } catch (error) {
+
+      console.error(
+        "Drive search error:",
+        error
+      );
+
+
+      return res.status(500).json({
+        error:
+          "Failed to search Google Drive",
+      });
     }
   }
 );

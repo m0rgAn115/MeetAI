@@ -14,6 +14,7 @@ export const MeetingEventSchema = z.object({
     "action_item",
     "change_request",
     "contradiction",
+    "file_search",
     "none",
   ]),
 
@@ -42,6 +43,8 @@ export const MeetingEventSchema = z.object({
   calendarEnd: z.string().nullable(),
 
   attendeeEmails: z.array(z.string()).nullable(),
+
+  driveQuery: z.string().nullable(),
 });
 
 
@@ -147,6 +150,7 @@ Normal conversation that does not require intervention.
 Rules:
 
 - Do not invent information.
+- driveQuery must be null unless a Drive search is useful.
 - Use the transcript as your source of truth.
 - For commitments, identify the person, action and deadline.
 - For contradictions, explain what conflicts.
@@ -158,6 +162,54 @@ Rules:
 - A commitment requires a reasonably clear owner.
 - An action_item does not require an owner.
 - Vague suggestions should still be "none".
+
+FILE SEARCH
+
+If someone clearly asks for a document, file, presentation,
+spreadsheet, PDF, notes, or other resource that may exist in
+Google Drive, classify the message as "file_search".
+
+Examples:
+
+"Can you find the XAI project?"
+"Where is the Q3 report?"
+"Can you get the presentation from last week?"
+"Find the Meet Agent document."
+
+For a file_search:
+
+- shouldIntervene = true
+- driveQuery should contain the shortest useful search phrase
+- Do not invent filenames
+- Do not search Drive for vague mentions of documents unless
+  someone is actually trying to find or retrieve one
+
+Example:
+
+"Can you find the XAI project?"
+
+driveQuery = "XAI"
+
+When creating driveQuery, extract only the important
+filename/topic keywords.
+
+Do NOT copy the entire sentence into driveQuery.
+
+Remove filler words, articles and conversational context.
+
+Examples:
+
+"That information is in my IMSS certificate."
+driveQuery = "constancia IMSS"
+
+"Who has the latest version of practica 1?"
+driveQuery = "practica 1"
+
+"Can you find the XAI project?"
+driveQuery = "XAI"
+
+"The information should be in Rodrigo's tax document."
+driveQuery = "Rodrigo tax"
 
 ATTENDEE EMAILS
 
