@@ -23,6 +23,7 @@ import { PostgresMemoryStore } from "./memory/postgres-store";
 import { MemoryStore } from "./memory/store";
 import { NullEmbeddingProvider, OpenAIEmbeddingProvider } from "./services/embeddings";
 import { KnowledgeRetrievalService } from "./services/retrieval";
+import { searchGmailMessages, sendGmailMessage } from "./gmail";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 3000);
@@ -328,6 +329,27 @@ function toExtensionEvent(result: Awaited<ReturnType<LiveCopilot["processFinalSe
     proposedActionId,
   };
 }
+
+app.post("/gmail/search", async (req, res) => {
+  try {
+    await authenticateRequest(req);
+    const query = String(req.body?.query ?? "").trim();
+    if (!query) throw new Error("query is required");
+    return res.json({ success: true, messages: await searchGmailMessages(query) });
+  } catch (error) { return sendError(res, error); }
+});
+
+// This endpoint only fires when the user explicitly confirms sending from the
+// extension UI — the agent never calls this automatically, it only prepares a draft.
+app.post("/gmail/send", async (req, res) => {
+  try {
+    await authenticateRequest(req);
+    if (!isGoogleCalendarConnected()) throw new Error("Google account is not connected");
+    const { to, subject, body } = req.body ?? {};
+    if (!to || !subject || !body) throw new Error("to, subject and body are required");
+    return res.json({ success: true, result: await sendGmailMessage(to, subject, body) });
+  } catch (error) { return sendError(res, error); }
+});
 
 curator.start();
 if (memoryObserver) void memoryObserver.start().catch((error) => console.error("Memory observer listener failed:", error));

@@ -11,7 +11,9 @@ import {
 // ============================================================
 
 export async function searchDriveFiles(
-  query: string
+  query: string,
+  modifiedAfter?: string | null,
+  modifiedBefore?: string | null
 ) {
 
   if (!isGoogleCalendarConnected()) {
@@ -101,7 +103,38 @@ export async function searchDriveFiles(
   );
 
 
-  if (terms.length === 0) {
+  // Filtro de fecha, si el agente detectó una referencia
+  // temporal ("ayer", "la semana pasada", etc). Drive acepta
+  // comparaciones sobre modifiedTime con timestamps RFC 3339.
+  const dateClauses: string[] = [];
+
+  if (modifiedAfter) {
+
+    dateClauses.push(
+      `modifiedTime > '${modifiedAfter}'`
+    );
+  }
+
+  if (modifiedBefore) {
+
+    dateClauses.push(
+      `modifiedTime < '${modifiedBefore}'`
+    );
+  }
+
+  if (dateClauses.length > 0) {
+
+    console.log(
+      "🗓️ Drive date filter:",
+      dateClauses
+    );
+  }
+
+
+  if (
+    terms.length === 0 &&
+    dateClauses.length === 0
+  ) {
 
     return [];
   }
@@ -112,6 +145,20 @@ export async function searchDriveFiles(
       value
         .replace(/\\/g, "\\\\")
         .replace(/'/g, "\\'");
+
+
+  const buildQuery = (
+    nameClause: string | null
+  ) => {
+
+    const clauses = [
+      "trashed = false",
+      ...(nameClause ? [nameClause] : []),
+      ...dateClauses,
+    ];
+
+    return clauses.join(" and ");
+  };
 
 
   // Ejemplo:
@@ -125,21 +172,22 @@ export async function searchDriveFiles(
   // name contains 'IMSS'
 
   const strictNameQuery =
-    terms
-      .map(
-        (term) =>
-          `name contains '${escapeDriveQuery(term)}'`
-      )
-      .join(" and ");
+    terms.length > 0
+      ? "(" +
+        terms
+          .map(
+            (term) =>
+              `name contains '${escapeDriveQuery(term)}'`
+          )
+          .join(" and ") +
+        ")"
+      : null;
 
 
   let response =
     await drive.files.list({
 
-      q: `
-        trashed = false
-        and (${strictNameQuery})
-      `,
+      q: buildQuery(strictNameQuery),
 
       pageSize: 25,
 
@@ -163,21 +211,20 @@ export async function searchDriveFiles(
   ) {
 
     const broadNameQuery =
+      "(" +
       terms
         .map(
           (term) =>
             `name contains '${escapeDriveQuery(term)}'`
         )
-        .join(" or ");
+        .join(" or ") +
+      ")";
 
 
     response =
       await drive.files.list({
 
-        q: `
-          trashed = false
-          and (${broadNameQuery})
-        `,
+        q: buildQuery(broadNameQuery),
 
         pageSize: 25,
 

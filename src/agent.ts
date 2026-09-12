@@ -15,6 +15,8 @@ export const MeetingEventSchema = z.object({
     "change_request",
     "contradiction",
     "file_search",
+    "email_search",
+    "email_draft",
     "none",
   ]),
 
@@ -45,6 +47,18 @@ export const MeetingEventSchema = z.object({
   attendeeEmails: z.array(z.string()).nullable(),
 
   driveQuery: z.string().nullable(),
+
+  driveModifiedAfter: z.string().nullable(),
+
+  driveModifiedBefore: z.string().nullable(),
+
+  emailQuery: z.string().nullable(),
+
+  emailTo: z.array(z.string()).nullable(),
+
+  emailSubject: z.string().nullable(),
+
+  emailBody: z.string().nullable(),
 });
 
 
@@ -151,6 +165,9 @@ Rules:
 
 - Do not invent information.
 - driveQuery must be null unless a Drive search is useful.
+- emailQuery must be null unless a Gmail search is useful.
+- emailTo, emailSubject and emailBody must be null unless
+  someone clearly asks for an email to be written or sent.
 - Use the transcript as your source of truth.
 - For commitments, identify the person, action and deadline.
 - For contradictions, explain what conflicts.
@@ -210,6 +227,148 @@ driveQuery = "XAI"
 
 "The information should be in Rodrigo's tax document."
 driveQuery = "Rodrigo tax"
+
+DRIVE DATE FILTERS
+
+If the message references WHEN the file was created or last
+worked on — "yesterday", "last week", "the document we worked
+on Monday", "the one from this morning" — resolve that relative
+expression into an actual date range using CURRENT DATE/TIME and
+USER TIME ZONE, and fill:
+
+- driveModifiedAfter: ISO 8601 datetime, start of the range
+- driveModifiedBefore: ISO 8601 datetime, end of the range
+
+Examples (assuming CURRENT DATE/TIME is Friday):
+
+"the email I got yesterday"
+driveModifiedAfter = start of yesterday
+driveModifiedBefore = end of yesterday
+
+"the document we worked on last week"
+driveModifiedAfter = start of last week (Mon)
+driveModifiedBefore = end of last week (Sun)
+
+If no time reference is mentioned, leave both null — do not
+invent a date range. driveModifiedAfter/driveModifiedBefore only
+apply to "file_search"; leave them null for every other type.
+
+EMAIL SEARCH
+
+If someone clearly asks to find or check an existing email
+in Gmail, classify the message as "email_search".
+
+Examples:
+
+"Can you find the email from Ana about the budget?"
+"Search my inbox for the invoice from last week."
+"Did someone send the contract by email?"
+
+Also classify as "email_search" when someone, in the middle of
+the conversation, mentions that they have, received, or recall
+an email containing relevant information — even if they are not
+directly asking anyone to search for it. In a live meeting,
+saying "I think I have the email from X" is a strong signal that
+surfacing that email right away would help the conversation.
+
+Examples:
+
+"I think I have the email from Innovation Campus."
+"That's in the email I got from Vercel."
+"I think I have an email from UPIS where they gave me all the
+information."
+
+These should be treated the same as an explicit request.
+
+Only trigger this when the message contains an identifiable
+sender, company, or topic to search for. A vague mention like
+"I have an email about that somewhere" with no identifiable
+sender or topic should stay "none" — there is nothing useful to
+search for yet.
+
+For an email_search:
+
+- shouldIntervene = true
+- emailQuery should contain the shortest useful Gmail search
+  phrase (sender, subject keywords, or topic)
+- Do not invent senders or subjects
+
+Examples:
+
+"Can you find the email from Ana about the budget?"
+emailQuery = "from:Ana budget"
+
+"I think I have the email from Innovation Campus."
+emailQuery = "Innovation Campus"
+
+"I think I have an email from UPIS where they gave me all the
+information."
+emailQuery = "UPIS"
+
+EMAIL DATE FILTERS
+
+Gmail search supports date filters directly inside the query
+string using "after:YYYY/MM/DD" and "before:YYYY/MM/DD" (note
+slashes, not dashes). If the message references WHEN the email
+arrived — "yesterday", "last week", "the one Vercel sent me
+Monday" — resolve the relative expression into actual dates
+using CURRENT DATE/TIME and USER TIME ZONE, and append the
+filter(s) to emailQuery alongside the keywords.
+
+Examples (assuming CURRENT DATE/TIME is Friday September 12,
+2026):
+
+"the email I got yesterday from Vercel"
+emailQuery = "Vercel after:2026/09/10 before:2026/09/12"
+
+"the email UPIS sent last week"
+emailQuery = "UPIS after:2026/09/07 before:2026/09/12"
+
+If no time reference is mentioned, do not add after:/before: —
+keep emailQuery as plain keywords.
+
+EMAIL DRAFT
+
+If someone clearly asks for an email to be written or sent
+during the meeting — for example asking to email the notes,
+send a recap, or invite someone by email — classify the
+message as "email_draft".
+
+Examples:
+
+"Can you email Rodrigo the notes from this meeting?"
+"Send everyone a recap by email."
+"Write an email to the client confirming the new deadline."
+
+For an email_draft:
+
+- shouldIntervene = true
+- emailTo should contain the recipient email address(es) if
+  they are known from the transcript (for example, from
+  addresses shared earlier in the conversation). If no
+  address is known, return an empty array.
+- emailSubject should be a short, clear subject line
+- emailBody should be a complete, professional draft based on
+  the meeting context so far
+- Never assume the email has been sent. This only prepares a
+  draft for the user to review and send themselves.
+
+If the email should reference or share a specific file that
+exists in Google Drive — for example, sending a presentation,
+report, or document that was mentioned in the conversation
+(even a few messages earlier) — also set "driveQuery" using the
+same rules as FILE SEARCH, so the backend can look up that file
+and attach its link to the email automatically. Leave
+"driveQuery" null if no specific file needs to be shared.
+
+Example:
+
+"Can you email Ana the Innovation Campus presentation?"
+emailTo = ["ana@example.com"] (if her address is known from
+  context, otherwise [])
+emailSubject = "Innovation Campus Presentation"
+emailBody = a short professional message
+driveQuery = "Innovation Campus presentation"
 
 ATTENDEE EMAILS
 

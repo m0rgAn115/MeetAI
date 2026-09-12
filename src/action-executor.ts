@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { createCalendarEvent, updateCalendarEvent } from "./calendar";
+import { createCalendarEvent, findConflictingEvent, isGoogleCalendarConnected, updateCalendarEvent } from "./calendar";
 import { ProposedActionRecord, RequestContext } from "./contracts";
 import { MemoryStore } from "./memory/store";
 
@@ -70,12 +70,21 @@ export class ActionExecutor {
     const idempotencyKey = createHash("sha256")
       .update(`${meetingId}:${actionType}:${JSON.stringify(payload)}`)
       .digest("hex");
+    let conflict: Awaited<ReturnType<typeof findConflictingEvent>> = null;
+    if (isGoogleCalendarConnected()) {
+      try {
+        conflict = await findConflictingEvent(payload.startDateTime, payload.endDateTime);
+      } catch (error) {
+        console.error("Calendar conflict check failed:", error);
+      }
+    }
     return this.store.proposeAction(context, meetingId, memoryId, actionType, payload, {
       title: payload.title,
       when: `${payload.startDateTime} — ${payload.endDateTime}`,
       attendees: payload.attendeeEmails,
       requiresConfirmation: true,
       correlationId,
+      conflict,
     }, idempotencyKey);
   }
 

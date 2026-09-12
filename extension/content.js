@@ -1204,6 +1204,181 @@ function setupCalendarUpdateButton(
 
 
 // ============================================================
+// SEND EMAIL FROM AGENT DRAFT
+// ============================================================
+//
+// This only fires when the user clicks "Send email" in the
+// panel — the agent itself never triggers a real send.
+
+async function sendGmailFromAgent(
+  to,
+  subject,
+  body
+) {
+
+  const response = await fetch(
+    "http://localhost:3000/gmail/send",
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json",
+      },
+
+      body: JSON.stringify({
+        to,
+        subject,
+        body,
+      }),
+    }
+  );
+
+
+  if (!response.ok) {
+
+    const error =
+      await response.json();
+
+
+    throw new Error(
+      error.error ??
+      `Backend returned ${response.status}`
+    );
+  }
+
+
+  return await response.json();
+}
+
+
+// ============================================================
+// SEND EMAIL BUTTON
+// ============================================================
+
+function setupGmailSendButton() {
+
+  const button =
+    document.getElementById(
+      "meet-agent-send-email"
+    );
+
+
+  if (!button) {
+    return;
+  }
+
+
+  button.addEventListener(
+    "click",
+    async () => {
+
+      const toInput =
+        document.getElementById(
+          "meet-agent-email-to"
+        );
+
+      const subjectInput =
+        document.getElementById(
+          "meet-agent-email-subject"
+        );
+
+      const bodyInput =
+        document.getElementById(
+          "meet-agent-email-body"
+        );
+
+
+      const to =
+        toInput?.value?.trim();
+
+      const subject =
+        subjectInput?.value?.trim();
+
+      const body =
+        bodyInput?.value?.trim();
+
+
+      if (
+        !to ||
+        !subject ||
+        !body
+      ) {
+
+        button.textContent =
+          "Missing recipient, subject or body";
+
+
+        setTimeout(
+          () => {
+
+            button.textContent =
+              "Send email";
+          },
+          2500
+        );
+
+
+        return;
+      }
+
+
+      const originalText =
+        button.textContent;
+
+
+      button.disabled = true;
+
+      button.textContent =
+        "Sending...";
+
+
+      try {
+
+        await sendGmailFromAgent(
+          to,
+          subject,
+          body
+        );
+
+
+        button.textContent =
+          "✓ Email sent";
+
+
+        console.log(
+          "📧 Email sent via Meet Agent"
+        );
+
+
+      } catch (error) {
+
+        console.error(
+          "Gmail send error:",
+          error
+        );
+
+
+        button.disabled = false;
+
+        button.textContent =
+          "Send failed — retry";
+
+
+        setTimeout(
+          () => {
+
+            button.textContent =
+              originalText;
+          },
+          2500
+        );
+      }
+    }
+  );
+}
+
+
+// ============================================================
 // RECOMMENDATION DISMISS / HIDE
 // ============================================================
 
@@ -1617,6 +1792,285 @@ function renderAgentEvent(
 
     return;
   }
+
+  // ----------------------------------------------------------
+  // GMAIL SEARCH
+  // ----------------------------------------------------------
+
+  if (
+    event.type === "email_search"
+  ) {
+
+    const messages =
+      Array.isArray(
+        event.gmailResults
+      )
+        ? event.gmailResults
+        : [];
+
+
+    container.innerHTML = `
+      <div class="meet-agent-card">
+
+        <button
+          id="meet-agent-dismiss"
+          class="meet-agent-dismiss"
+          type="button"
+          aria-label="Dismiss recommendation"
+          title="Dismiss"
+        >
+          ×
+        </button>
+
+
+        <div class="meet-agent-card-title">
+          ✉️ Gmail search
+        </div>
+
+
+        ${
+          messages.length === 0
+            ? `
+              <div class="meet-agent-drive-empty">
+
+                No matching emails found for
+
+                <strong>
+                  ${escapeHtml(
+                    event.emailQuery ??
+                    ""
+                  )}
+                </strong>
+
+              </div>
+            `
+            : `
+              <div class="meet-agent-drive-summary">
+
+                Found
+                ${messages.length}
+                email${messages.length === 1 ? "" : "s"}
+
+              </div>
+
+
+              <div class="meet-agent-drive-results">
+
+                ${messages
+                  .map(
+                    (message, index) => `
+
+                      <div
+                        class="meet-agent-drive-result"
+                      >
+
+                        <div
+                          class="meet-agent-drive-file-info"
+                        >
+
+                          <div
+                            class="meet-agent-drive-name"
+                            title="${escapeHtml(
+                              message.subject ??
+                              "(sin asunto)"
+                            )}"
+                          >
+                            ✉️
+                            ${escapeHtml(
+                              message.subject ??
+                              "(sin asunto)"
+                            )}
+                          </div>
+
+
+                          ${
+                            message.from
+                              ? `
+                                <div
+                                  class="meet-agent-drive-meta"
+                                >
+                                  ${escapeHtml(
+                                    message.from
+                                  )}
+                                </div>
+                              `
+                              : ""
+                          }
+
+
+                          ${
+                            message.snippet
+                              ? `
+                                <div
+                                  class="meet-agent-drive-meta"
+                                >
+                                  ${escapeHtml(
+                                    message.snippet
+                                  )}
+                                </div>
+                              `
+                              : ""
+                          }
+
+                        </div>
+
+
+                        ${
+                          message.webViewLink
+                            ? `
+                              <button
+                                class="
+                                  meet-agent-drive-open
+                                  meet-agent-open-gmail
+                                "
+                                data-gmail-index="${index}"
+                                title="Open in Gmail"
+                              >
+                                Open
+                              </button>
+                            `
+                            : ""
+                        }
+
+                      </div>
+
+                    `
+                  )
+                  .join("")}
+
+              </div>
+            `
+        }
+
+      </div>
+    `;
+
+
+    setupDismissButton();
+
+
+    document
+      .querySelectorAll(
+        ".meet-agent-open-gmail"
+      )
+      .forEach(
+        (button) => {
+
+          button.addEventListener(
+            "click",
+            () => {
+
+              const index =
+                Number(
+                  button.dataset
+                    .gmailIndex
+                );
+
+
+              const message =
+                messages[index];
+
+
+              if (
+                message &&
+                message.webViewLink
+              ) {
+
+                window.open(
+                  message.webViewLink,
+                  "_blank",
+                  "noopener,noreferrer"
+                );
+              }
+            }
+          );
+        }
+      );
+
+
+    return;
+  }
+
+
+  // ----------------------------------------------------------
+  // EMAIL DRAFT
+  // ----------------------------------------------------------
+
+  if (
+    event.type === "email_draft"
+  ) {
+
+    container.innerHTML = `
+      <div class="meet-agent-card">
+
+        <button
+          id="meet-agent-dismiss"
+          class="meet-agent-dismiss"
+          type="button"
+          aria-label="Dismiss recommendation"
+          title="Dismiss"
+        >
+          ×
+        </button>
+
+
+        <div class="meet-agent-card-title">
+          ✉️ Email draft
+        </div>
+
+
+        <div class="meet-agent-form">
+
+          <input
+            id="meet-agent-email-to"
+            type="text"
+            placeholder="Recipient email(s), comma separated"
+            value="${escapeHtml(
+              event.emailTo?.join(", ") ??
+              ""
+            )}"
+          />
+
+          <input
+            id="meet-agent-email-subject"
+            type="text"
+            placeholder="Subject"
+            value="${escapeHtml(
+              event.emailSubject ??
+              ""
+            )}"
+          />
+
+          <textarea
+            id="meet-agent-email-body"
+            placeholder="Body"
+          >${escapeHtml(
+            event.emailBody ??
+            ""
+          )}</textarea>
+
+        </div>
+
+
+        <button
+          id="meet-agent-send-email"
+          class="meet-agent-action-button"
+        >
+          Send email
+        </button>
+
+      </div>
+    `;
+
+
+    setupDismissButton();
+
+    setupGmailSendButton();
+
+
+    return;
+  }
+
 
   // ----------------------------------------------------------
   // COMMITMENT
